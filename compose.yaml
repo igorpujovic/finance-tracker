@@ -1,9 +1,34 @@
 services:
   postgres:
-    image: 'postgres:latest'
+    image: postgres:18
     environment:
-      - 'POSTGRES_DB=mydatabase'
-      - 'POSTGRES_PASSWORD=secret'
-      - 'POSTGRES_USER=myuser'
+      POSTGRES_DB: ${POSTGRES_DB:-finance_tracker}
+      POSTGRES_USER: ${POSTGRES_USER:-finance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finance}
     ports:
-      - '5432'
+      - "5432:5432"
+    volumes:
+      # postgres:18 changed this: the mount goes at /var/lib/postgresql, not at
+      # .../data as it did through 17. With the old path the image refuses to
+      # start, reporting data in an "unused mount/volume".
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finance} -d ${POSTGRES_DB:-finance_tracker}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-finance_tracker}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-finance}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-finance}
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres-data:

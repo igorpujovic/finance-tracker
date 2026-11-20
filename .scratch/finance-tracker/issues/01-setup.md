@@ -1,6 +1,6 @@
 # 01 — Setup: project config, compose, schema, seed data, CRUD
 
-Status: ready-for-agent
+Status: resolved
 
 Roadmap step 1. Everything needed for `docker compose up` to produce a running API with a real
 schema, reference data, and working CRUD over categories and manual transactions.
@@ -48,3 +48,25 @@ BUS PLUS, NETFLIX, PLATA.
   null fingerprint, rejects a `MANUAL` row with a fingerprint, and permits two manual rows that
   would otherwise collide.
 - Controller tests cover the category 409 and the transaction filter and paging defaults.
+
+## Comments
+
+Done. 23 tests green against a real PostgreSQL 18; `docker compose up` builds the image,
+starts both services and answers on 8080; Scalar, Swagger UI and `/v3/api-docs` all serve.
+
+Four things were different from what the spec assumed, each found by running rather than
+by reading:
+
+- **Spring Boot 4.2 ships Jackson 3** (`tools.jackson:jackson-databind`). The autoconfigured
+  `ObjectMapper` is `tools.jackson.databind.ObjectMapper`; `com.fasterxml...` is present only
+  as a transitive for YAML and has no bean. Annotations stay in `com.fasterxml.jackson.annotation`.
+- **`@AutoConfigureMockMvc` moved** to `org.springframework.boot.webmvc.test.autoconfigure`.
+- **Testcontainers 2.x renamed its modules** (`testcontainers-postgresql`), moved the class to
+  `org.testcontainers.postgresql`, and made `PostgreSQLContainer` non-generic — no `<?>`.
+- **postgres:18 moved its data directory.** The volume mounts at `/var/lib/postgresql`, not
+  `/var/lib/postgresql/data`; with the old path the container exits 1 on first start.
+
+Carried into step 2 as planned: manual transactions are RSD-only and return 400 for any other
+currency, since converting one needs the rate machinery from step 4.
+
+No README yet — that is step 6's scope.
