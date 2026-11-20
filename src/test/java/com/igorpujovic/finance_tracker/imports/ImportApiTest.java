@@ -1,0 +1,316 @@
+package com.igorpujovic.finance_tracker.imports;
+
+import com.igorpujovic.finance_tracker.support.PostgresTest;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * ADR-0006: the import is driven through its own endpoint against a real PostgreSQL,
+ * because what it has to get right lives in a query and a constraint — the set-based
+ * duplicate lookup, the unique index behind it, and the one transaction that writes
+ * the rows, the errors and the summary together.
+ */
+@Transactional
+class ImportApiTest extends PostgresTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @Autowired
+    ObjectMapper json;
+
+    private static byte[] fixture(String name) throws Exception {
+        try (InputStream in = ImportApiTest.class.getResourceAsStream("/statements/" + name)) {
+            assertThat(in).as("the fixture /statements/%s", name).isNotNull();
+            return in.readAllBytes();
+        }
+    }
+
+    private static MockMultipartFile upload(String name, byte[] content) {
+        return new MockMultipartFile("file", name, "text/csv", content);
+    }
+
+    private static MockMultipartFile upload(String name, String content) {
+        return upload(name, content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** @return the summary of a successful import */
+    private JsonNode importing(MockMultipartFile file) throws Exception {
+        String body = mvc.perform(multipart("/api/imports").file(file))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(body);
+    }
+
+    private JsonNode detailOf(long batchId) throws Exception {
+        String body = mvc.perform(get("/api/imports/" + batchId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(body);
+    }
+
+    @Test
+    @DisplayName("the sample statement reports 7 rows: 3 imported, 1 duplicate, 3 rejected")
+    void importsTheSampleStatement() throws Exception {
+        mvc.perform(multipart("/api/imports").file(upload("sample.csv", fixture("sample.csv"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.fileName").value("sample.csv"))
+                .andExpect(jsonPath("$.totalRows").value(7))
+                .andExpect(jsonPath("$.importedRows").value(3))
+                .andExpect(jsonPath("$.duplicateRows").value(1))
+                .andExpect(jsonPath("$.rejectedRows").value(3));
+    }
+
+    @Test
+    @DisplayName("every source line is accounted for exactly once in the summary")
+    void accountsForEverySourceLine() throws Exception {
+        JsonNode batch = importing(upload("sample.csv", fixture("sample.csv")));
+
+        assertThat(batch.get("importedRows").asInt()
+                + batch.get("duplicateRows").asInt()
+                + batch.get("rejectedRows").asInt())
+                .isEqualTo(batch.get("totalRows").asInt());
+    }
+
+    @Test
+    @DisplayName("re-uploading a statement adds nothing and reports every line as a duplicate")
+    void reportsASecondUploadAsAllDuplicates() throws Exception {
+        JsonNode first = importing(upload("clean.csv", fixture("clean.csv")));
+        assertThat(first.get("importedRows").asInt()).isEqualTo(3);
+
+        long before = transactionCount();
+        JsonNode second = importing(upload("clean.csv", fixture("clean.csv")));
+
+        assertThat(second.get("totalRows").asInt()).isEqualTo(3);
+        assertThat(second.get("duplicateRows").asInt()).isEqualTo(3);
+        assertThat(second.get("importedRows").asInt()).isZero();
+        assertThat(second.get("rejectedRows").asInt()).isZero();
+        assertThat(transactionCount()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("re-uploading the sample adds nothing: what imported is a duplicate, what was rejected is rejected again")
+    void reportsASecondSampleUploadConsistently() throws Exception {
+        importing(upload("sample.csv", fixture("sample.csv")));
+        long before = transactionCount();
+
+        JsonNode second = importing(upload("sample.csv", fixture("sample.csv")));
+
+        assertThat(second.get("totalRows").asInt()).isEqualTo(7);
+        assertThat(second.get("importedRows").asInt()).isZero();
+        assertThat(second.get("duplicateRows").asInt()).isEqualTo(4);
+        assertThat(second.get("rejectedRows").asInt()).isEqualTo(3);
+        assertThat(transactionCount()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("a line repeated inside one file is a duplicate even on an empty database")
+    void catchesADuplicateWithinTheFile() throws Exception {
+        JsonNode batch = importing(upload("repeated.csv", """
+                date,description,amount,currency
+                05.11.2026,EPS SNABDEVANJE,-4870.00,RSD
+                05.11.2026,EPS SNABDEVANJE,-4870.00,RSD
+                """));
+
+        assertThat(batch.get("importedRows").asInt()).isEqualTo(1);
+        assertThat(batch.get("duplicateRows").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a duplicate is counted and skipped, never recorded as a rejected line")
+    void doesNotRecordDuplicatesAsErrors() throws Exception {
+        JsonNode batch = importing(upload("repeated.csv", """
+                date,description,amount,currency
+                05.11.2026,EPS SNABDEVANJE,-4870.00,RSD
+                05.11.2026,EPS SNABDEVANJE,-4870.00,RSD
+                """));
+
+        assertThat(detailOf(batch.get("id").asLong()).get("errors")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("both copies of a line nothing can convert are rejected, neither is called a duplicate")
+    void doesNotCallACopyOfARejectedLineADuplicate() throws Exception {
+        JsonNode batch = importing(upload("repeated-eur.csv", """
+                date,description,amount,currency
+                04.11.2026,"NETFLIX.COM, AMSTERDAM",-9.99,EUR
+                04.11.2026,"NETFLIX.COM, AMSTERDAM",-9.99,EUR
+                """));
+
+        assertThat(batch.get("importedRows").asInt()).isZero();
+        assertThat(batch.get("duplicateRows").asInt())
+                .as("a duplicate is a line already imported, and nothing here was")
+                .isZero();
+        assertThat(batch.get("rejectedRows").asInt()).isEqualTo(2);
+
+        // Every rejected line gets its own error row, or the count on the batch would
+        // claim a rejection that nothing in the audit record explains.
+        mvc.perform(get("/api/imports/" + batch.get("id").asLong()))
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.errors[0].reason").value("no exchange rate for EUR on 2026-11-04"))
+                .andExpect(jsonPath("$.errors[1].reason").value("no exchange rate for EUR on 2026-11-04"));
+    }
+
+    @Test
+    @DisplayName("a rejected line is numbered by where it really sits in the file, blank lines included")
+    void numbersRejectedLinesByTheirPlaceInTheFile() throws Exception {
+        JsonNode batch = importing(upload("gappy.csv", """
+                date,description,amount,currency
+                01.11.2026,PLATA OKTOBAR,95000.00,RSD
+
+                07.11.2026,LIDL 112,abc,RSD
+                """));
+
+        mvc.perform(get("/api/imports/" + batch.get("id").asLong()))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].rowNumber").value(4))
+                .andExpect(jsonPath("$.errors[0].rawLine").value("07.11.2026,LIDL 112,abc,RSD"));
+    }
+
+    @Test
+    @DisplayName("the detail endpoint lists each rejected line in file order, verbatim, with its reason")
+    void reportsRejectedLinesWithReasons() throws Exception {
+        JsonNode batch = importing(upload("sample.csv", fixture("sample.csv")));
+
+        mvc.perform(get("/api/imports/" + batch.get("id").asLong()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errors.length()").value(3))
+                .andExpect(jsonPath("$.errors[0].rowNumber").value(4))
+                .andExpect(jsonPath("$.errors[0].rawLine")
+                        .value("04.11.2026,\"NETFLIX.COM, AMSTERDAM\",-9.99,EUR"))
+                .andExpect(jsonPath("$.errors[0].reason").value("no exchange rate for EUR on 2026-11-04"))
+                .andExpect(jsonPath("$.errors[1].rowNumber").value(7))
+                .andExpect(jsonPath("$.errors[1].rawLine").value("31.11.2026,BUS PLUS DOPUNA,-1500.00,RSD"))
+                .andExpect(jsonPath("$.errors[2].rowNumber").value(8))
+                .andExpect(jsonPath("$.errors[2].rawLine").value("07.11.2026,LIDL 112,abc,RSD"));
+    }
+
+    @Test
+    @DisplayName("an imported transaction is marked as imported, tied to its batch, and left uncategorized")
+    void writesImportedTransactions() throws Exception {
+        long batchId = importing(upload("clean.csv", fixture("clean.csv"))).get("id").asLong();
+
+        mvc.perform(get("/api/transactions").param("from", "2026-11-01").param("to", "2026-11-30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.content[?(@.description == 'MAXI 245 BEOGRAD')].source")
+                        .value("IMPORT"))
+                .andExpect(jsonPath("$.content[?(@.description == 'MAXI 245 BEOGRAD')].importBatchId")
+                        .value((int) batchId))
+                .andExpect(jsonPath("$.content[?(@.description == 'MAXI 245 BEOGRAD')].amount")
+                        .value(-2450.80))
+                .andExpect(jsonPath("$.content[?(@.description == 'MAXI 245 BEOGRAD')].amountRsd")
+                        .value(-2450.80))
+                .andExpect(jsonPath("$.content[?(@.description == 'MAXI 245 BEOGRAD')].type")
+                        .value("EXPENSE"));
+
+        // Uncategorized is a real state with its own filter, not an absence. Step 3 of
+        // the roadmap is what starts emptying this.
+        mvc.perform(get("/api/transactions").param("uncategorized", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3));
+    }
+
+    @Test
+    @DisplayName("the list of past imports carries the summaries but not every rejected line")
+    void listsPastImports() throws Exception {
+        importing(upload("clean.csv", fixture("clean.csv")));
+
+        mvc.perform(get("/api/imports"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.content[0].fileName").value("clean.csv"))
+                .andExpect(jsonPath("$.content[0].totalRows").value(3))
+                .andExpect(jsonPath("$.content[0].errors").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("an import batch that does not exist is a 404")
+    void refusesUnknownBatch() throws Exception {
+        mvc.perform(get("/api/imports/404404"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("a file that is not a .csv is refused, and nothing is recorded")
+    void refusesNonCsvFile() throws Exception {
+        mvc.perform(multipart("/api/imports").file(upload("statement.xlsx", "date,description,amount,currency\n")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(".csv")));
+
+        mvc.perform(get("/api/imports"))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    @DisplayName("a statement with the wrong header is refused before anything is written")
+    void refusesWrongHeader() throws Exception {
+        mvc.perform(multipart("/api/imports").file(upload("statement.csv", """
+                        datum,opis,iznos,valuta
+                        01.11.2026,PLATA OKTOBAR,95000.00,RSD
+                        """)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value(org.hamcrest.Matchers.containsString("date,description,amount,currency")));
+
+        mvc.perform(get("/api/imports"))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    @DisplayName("an empty upload is refused")
+    void refusesEmptyFile() throws Exception {
+        mvc.perform(multipart("/api/imports").file(upload("statement.csv", new byte[0])))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("a statement over five megabytes is refused as a bad request, not accepted and truncated")
+    void refusesOversizedFile() throws Exception {
+        byte[] oversized = new byte[(int) ImportService.MAX_BYTES + 1];
+        Arrays.fill(oversized, (byte) 'x');
+
+        mvc.perform(multipart("/api/imports").file(upload("statement.csv", oversized)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("an upload with no file part at all is a bad request")
+    void refusesMissingFilePart() throws Exception {
+        mvc.perform(multipart("/api/imports"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("a statement saved with a byte-order mark still has the header this importer expects")
+    void toleratesAByteOrderMark() throws Exception {
+        JsonNode batch = importing(upload("clean.csv",
+                '﻿' + new String(fixture("clean.csv"), StandardCharsets.UTF_8)));
+
+        assertThat(batch.get("importedRows").asInt()).isEqualTo(3);
+    }
+
+    private long transactionCount() throws Exception {
+        String body = mvc.perform(get("/api/transactions"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(body).get("totalElements").asLong();
+    }
+}

@@ -7,6 +7,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -30,6 +31,17 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiError> badRequest(IllegalArgumentException e) {
         return ResponseEntity.badRequest()
                 .body(ApiError.of(400, "Bad Request", e.getMessage()));
+    }
+
+    /**
+     * An upload past the size the container will buffer at all. It is the same mistake
+     * as a file past the limit the importer enforces, so it is reported the same way
+     * rather than as the 413 Spring would otherwise produce.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> tooLarge(MaxUploadSizeExceededException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(400, "Bad Request", "The uploaded file is too large"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
