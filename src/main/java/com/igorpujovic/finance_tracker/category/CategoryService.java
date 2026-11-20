@@ -4,6 +4,7 @@ import com.igorpujovic.finance_tracker.common.ConflictException;
 import com.igorpujovic.finance_tracker.common.NotFoundException;
 import com.igorpujovic.finance_tracker.rule.CategoryRuleRepository;
 import com.igorpujovic.finance_tracker.transaction.TransactionRepository;
+import org.springframework.data.core.TypedPropertyPath;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,12 +14,6 @@ import java.util.List;
 @Service
 @Transactional
 public class CategoryService {
-
-    /**
-     * Method references rather than {@code Sort.by("type", "name")}: the compiler
-     * checks the properties exist and a rename is caught at build time.
-     */
-    private static final Sort.TypedSort<Category> BY = Sort.sort(Category.class);
 
     private final CategoryRepository categories;
     private final TransactionRepository transactions;
@@ -34,7 +29,13 @@ public class CategoryService {
 
     @Transactional(readOnly = true)
     public List<Category> list() {
-        return categories.findAll(BY.by(Category::getType).and(BY.by(Category::getName)));
+        // Method references rather than Sort.by("type", "name"): the compiler checks
+        // the properties exist, so a rename is caught at build time instead of on the
+        // first request. Sort.sort(Class) and Sort.TypedSort did this before Spring
+        // Data 4.1 and are deprecated in favour of these typed paths.
+        return categories.findAll(Sort.by(
+                TypedPropertyPath.path(Category::getType),
+                TypedPropertyPath.path(Category::getName)));
     }
 
     @Transactional(readOnly = true)

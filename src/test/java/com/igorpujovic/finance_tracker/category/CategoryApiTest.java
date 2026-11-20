@@ -10,6 +10,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -43,6 +45,22 @@ class CategoryApiTest extends PostgresTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.name == 'Food')].type").value("EXPENSE"))
                 .andExpect(jsonPath("$[?(@.name == 'Salary')].type").value("INCOME"));
+    }
+
+    @Test
+    @DisplayName("categories come back grouped by type, alphabetical within each")
+    void sortsByTypeThenName() throws Exception {
+        mvc.perform(get("/api/categories"))
+                .andExpect(status().isOk())
+                // Expenses first, then income; alphabetical inside each group. Asserting
+                // the boundary is what proves both keys are applied and in which order.
+                .andExpect(jsonPath("$[0].name").value("Entertainment"))
+                .andExpect(jsonPath("$[0].type").value("EXPENSE"))
+                .andExpect(jsonPath("$[4].name").value("Utilities"))
+                .andExpect(jsonPath("$[4].type").value("EXPENSE"))
+                .andExpect(jsonPath("$[5].name").value("Refunds"))
+                .andExpect(jsonPath("$[5].type").value("INCOME"))
+                .andExpect(jsonPath("$[6].name").value("Salary"));
     }
 
     @Test
