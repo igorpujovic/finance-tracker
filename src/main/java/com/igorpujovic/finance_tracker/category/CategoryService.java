@@ -14,6 +14,12 @@ import java.util.List;
 @Transactional
 public class CategoryService {
 
+    /**
+     * Method references rather than {@code Sort.by("type", "name")}: the compiler
+     * checks the properties exist and a rename is caught at build time.
+     */
+    private static final Sort.TypedSort<Category> BY = Sort.sort(Category.class);
+
     private final CategoryRepository categories;
     private final TransactionRepository transactions;
     private final CategoryRuleRepository rules;
@@ -28,7 +34,7 @@ public class CategoryService {
 
     @Transactional(readOnly = true)
     public List<Category> list() {
-        return categories.findAll(Sort.by("type", "name"));
+        return categories.findAll(BY.by(Category::getType).and(BY.by(Category::getName)));
     }
 
     @Transactional(readOnly = true)

@@ -39,7 +39,8 @@ public class TransactionController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) TransactionType type,
             @RequestParam(defaultValue = "false") boolean uncategorized,
-            @PageableDefault(size = 20, sort = {"date", "id"}, direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(size = 20, sort = {Transaction_.DATE, Transaction_.ID},
+                    direction = Sort.Direction.DESC) Pageable pageable) {
         return PageResponse.from(
                 service.search(from, to, categoryId, type, uncategorized, pageable),
                 TransactionResponse::of);
