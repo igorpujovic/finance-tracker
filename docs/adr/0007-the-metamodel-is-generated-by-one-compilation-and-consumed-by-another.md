@@ -43,6 +43,22 @@ that generates into it, and that is no longer the execution that compiles.
 uses it, for the same editor: an IDE reads the pom to find the processor and generate the
 metamodel itself. The executions that compile switch `proc` off and ignore it.
 
+The processor's entity index is switched off with `-Aindex=false`, also for the plugin rather
+than for one execution. The index exists so the processor can validate HQL written in
+annotations across compilations, which this project never does. Left on, it writes twenty-one
+resources into the annotation output directory, and the editor's own processor run then fails to
+create them — `could not write entity index: Source file already created` — which fails the
+editor's build and leaves every type in the project unresolved while the command-line build
+stays green.
+
+Two settings were tried here and are deliberately absent. `incrementalCompilation`, recorded in
+step 2 as the cure for a class going missing, is not a parameter this plugin has: Maven ignored
+it and warned, so that cure was never in effect and the bug it describes is almost certainly
+this one seen from a different angle. The real parameter, `useIncrementalCompilation`, has the
+reverse sense to its name — `false` compiles only what it judges stale, which after a `clean`
+compiled 43 of 54 sources and brought the corruption back at its worst. The plugin's default,
+a full recompile whenever anything changed, is what every measurement here was taken under.
+
 Rejected alternatives: pinning `maven-compiler-plugin` to 3.14.0 (identical failure rate),
 `-XDuseUnsharedTable=false` (no effect once the compiler is reused), and forking alone, which
 reduced it to one build in twelve rather than removing it. Committing the generated metamodel

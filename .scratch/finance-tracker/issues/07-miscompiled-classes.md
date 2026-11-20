@@ -113,3 +113,31 @@ in the Maven image, and the jar it produces starts and serves `/api/rules`,
 `/api/transactions` and `/api/rules/apply` with nothing in the container log. Forking needs a
 real `javac`, which the `maven:3.9-eclipse-temurin-21` build stage has; a build image carrying
 only a JRE would not work.
+
+### The editor was broken too, and not by the same thing
+
+Reported after the fix above: 334 errors in the editor, on a tree whose `mvn clean test` was
+green. They were not about the metamodel — the language server could not resolve the project's
+own types, `Transaction cannot be resolved to a type`, `CategoryRepository cannot be resolved to
+a type`, `The import com.igorpujovic.finance_tracker.common cannot be resolved`.
+
+The cause is in the language server's log, which had been repeating it since 13:45, well before
+any of this: `could not write entity index: Source file already created`, hundreds of times.
+The Hibernate processor writes an index of entity names as a side product — twenty-one resources
+with names like `entity/index/.CategoryType.EXPENSE` and `entity/index/.EXPENSE` — and the
+editor's own processor run cannot create them, which fails its build and leaves the whole
+project unresolved. The index is for validating HQL written in annotations across compilations,
+which this project never does, so it is now off: `-Aindex=false`, declared for the plugin so the
+editor switches it off too. The option is `index`; `entity.index` appears in the processor's own
+strings but is not one of its supported options, and javac warns and ignores it.
+
+Two notes from the same pass. The `<fork>true</fork>` added above could not autodetect `javac`
+and was silently falling back to whatever was on the PATH, so the executable is now named
+explicitly. And `incrementalCompilation`, recorded in 02 as the cure for a class going missing,
+is not a parameter `maven-compiler-plugin` has — it was ignored all along, with a warning in
+every build nobody read. Its real name, `useIncrementalCompilation`, means the opposite of what
+it looks like: set to `false` it compiled 43 of 54 sources after a `clean` and brought the
+corruption back at its worst, so it is gone and the default stands.
+
+Measured again on the final configuration: no corruption and no stray index files in twelve
+consecutive clean builds, 92 tests green, and no warnings left in the build output.

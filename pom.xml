@@ -125,19 +125,25 @@
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
 				<configuration>
-					<!-- The incremental check and the annotation processor disagree. With it
-					     on, a single `mvn clean test` compiles all 43 sources, reports
-					     success, and writes 42 class files: one class that reads a generated
-					     `*_` metamodel is silently left out, and which one varies between
-					     runs. The application then starts without it, so the symptom is a
-					     404 from an endpoint whose controller is missing rather than a build
-					     failure. Recompiling everything costs a second and cannot do that. -->
-					<incrementalCompilation>none</incrementalCompilation>
+					<!-- No incremental setting, deliberately. Step 2 set
+					     `incrementalCompilation`, which is not a parameter this plugin has
+					     ever had: Maven ignored it and said so in a warning nobody read, so
+					     the setting recorded as the cure for that step's missing-class bug
+					     was never once in effect. The real parameter is
+					     `useIncrementalCompilation`, and its sense is the reverse of its
+					     name — `false` compiles only the sources it thinks are stale. Set
+					     that way it compiled 43 of 54 sources after a `clean` and brought
+					     the corruption of ADR-0007 back at its worst. The default is a full
+					     recompile whenever anything changed, which is both what is wanted
+					     and what every measurement in ADR-0007 was taken under. -->
 					<!-- Each compilation gets its own javac process. ADR-0007: in-process
 					     javac is reused across the executions of one Maven run, and a
 					     compilation that is not the first in its JVM is the one that writes
-					     the broken class files. -->
+					     the broken class files. The executable is named rather than left to
+					     autodetection, which fails here and falls back to whatever `javac`
+					     is on the PATH — a different JDK, or none. -->
 					<fork>true</fork>
+					<executable>${java.home}/bin/javac</executable>
 					<!-- Declared for the plugin rather than for the one execution that uses
 					     it, so that an IDE reading this pom can find the processor and
 					     generate the metamodel for itself. The two executions that compile
@@ -149,6 +155,18 @@
 							<version>${hibernate.version}</version>
 						</path>
 					</annotationProcessorPaths>
+					<!-- The processor's entity index is off. It exists so that the processor
+					     can validate HQL across compilations, which this project does not
+					     use: nothing here writes HQL in an annotation, and the metamodel is
+					     generated without it. Leaving it on writes twenty-one index
+					     resources into the annotation output directory, which the editor's
+					     own processor run then cannot create, and it fails with "could not
+					     write entity index / Source file already created" — taking the rest
+					     of the editor's build with it. Declared for the plugin so that an
+					     IDE reading this pom switches it off too. -->
+					<compilerArgs>
+						<arg>-Aindex=false</arg>
+					</compilerArgs>
 				</configuration>
 				<executions>
 					<!-- Pass one: run the processor and write the metamodel sources. Nothing
