@@ -37,6 +37,15 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
+		<!-- The Kurs client of ADR-0005. Boot 4 is modular and `spring-boot-starter-webmvc`
+		     brings only the server half of spring-web: without this module there is no
+		     autoconfigured `RestClient.Builder` and no `HttpClientSettings`, so the client
+		     would have to be assembled by hand and would carry neither this project's
+		     Jackson 3 message converters nor a timeout. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-restclient</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>

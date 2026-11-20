@@ -1,5 +1,6 @@
 package com.igorpujovic.finance_tracker.common;
 
+import com.igorpujovic.finance_tracker.rates.RatesUnavailableException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -42,6 +43,19 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiError> tooLarge(MaxUploadSizeExceededException e) {
         return ResponseEntity.badRequest()
                 .body(ApiError.of(400, "Bad Request", "The uploaded file is too large"));
+    }
+
+    /**
+     * ADR-0005: a failure to reach the National Bank is not the statement's fault, and
+     * recording it as one would write a permanent audit record accusing valid rows of
+     * being malformed because the network blinked. The pre-pass runs before the import
+     * transaction opens, so aborting here costs nothing and compensates for nothing —
+     * there is no partial write to undo and no half-finished batch left in the history.
+     */
+    @ExceptionHandler(RatesUnavailableException.class)
+    public ResponseEntity<ApiError> ratesUnavailable(RatesUnavailableException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiError.of(503, "Service Unavailable", e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
