@@ -204,7 +204,7 @@ class RuleApiTest extends PostgresTest {
 
         assertThat(applied.get("examined").asInt()).isEqualTo(1);
         assertThat(applied.get("categorized").asInt()).isEqualTo(1);
-        assertThat(transactionOf(id).get("categoryName").asText()).isEqualTo("Food");
+        assertThat(transactionOf(id).get("categoryName").asString()).isEqualTo("Food");
     }
 
     @Test
@@ -220,7 +220,7 @@ class RuleApiTest extends PostgresTest {
                 .as("a categorized transaction is not in the queue re-apply works through")
                 .isZero();
         assertThat(applied.get("categorized").asInt()).isZero();
-        assertThat(transactionOf(id).get("categoryName").asText()).isEqualTo("Health");
+        assertThat(transactionOf(id).get("categoryName").asString()).isEqualTo("Health");
     }
 
     @Test
@@ -233,7 +233,7 @@ class RuleApiTest extends PostgresTest {
 
         assertThat(applied.get("examined").asInt()).isEqualTo(2);
         assertThat(applied.get("categorized").asInt()).isEqualTo(1);
-        assertThat(transactionOf(matched).get("categoryName").asText()).isEqualTo("Food");
+        assertThat(transactionOf(matched).get("categoryName").asString()).isEqualTo("Food");
         assertThat(transactionOf(unmatched).get("categoryId").isNull())
                 .as("nothing matched it, so it stays in the uncategorized queue")
                 .isTrue();
