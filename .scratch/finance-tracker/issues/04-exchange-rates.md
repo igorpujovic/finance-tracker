@@ -34,7 +34,7 @@ Roadmap step 4. This is the step ADR-0005 is about; read it first.
 
 ## Comments
 
-Done. 104 tests green against a real PostgreSQL 18, and the endpoints were also driven
+Done. 118 tests green against a real PostgreSQL 18, and the endpoints were also driven
 against a running app talking to the real Kurs API, so the client was seen to work against
 the live document rather than only against the fake.
 
@@ -82,11 +82,18 @@ WireMock or MockWebServer, because Boot 4.2.0 manages neither: either would have
 version pinned by hand to buy stubbing that took sixty lines. It serves a real 503, a real
 read timeout and a real malformed body, and counts the dates it was asked about.
 
-**Known gaps, by agreed test scope.** Every test here sits at `POST /api/imports`, which
-was the one seam agreed for this step. So `POST /api/exchange-rates/refresh` and the
-scheduled job have no test of their own — both were exercised by hand against the running
-app (first refresh stored 40 rates, the second stored 0), and `contextLoads` proves they
-wire up, but neither is pinned by the suite. There is also no pure-JUnit test over
-`DinarAmount.of` or `PublishedRate.of`, which ADR-0006 and the specification's testing
-section both ask for; the arithmetic is covered only through the import endpoint, where
-the parity division and both rounding refusals are now asserted. Worth closing in step 6.
+The import endpoint was the agreed seam for this step and carries most of the weight, with
+two additions made afterwards so that nothing in the step is pinned only by hand:
+
+- `DinarAmountTest` and `PublishedRateTest` are pure JUnit over the conversion arithmetic,
+  which is where ADR-0006 puts it. The sharpest of them is that the quotient is rounded
+  before it is multiplied: a thousand Belgian francs at the stored 2.9162 is 2916.20,
+  where the exact quotient would make it 2916.24, so the test fails if that order is ever
+  reversed.
+- `ExchangeRateApiTest` covers the refresh endpoint and the scheduled job: rates landing
+  under the attributed date, a second refresh keeping nothing and still not answering 409,
+  a 503 that stores nothing, and the job swallowing an unreachable bank rather than
+  putting a stack trace in the log every working morning the network hiccups.
+
+118 tests, and the refresh endpoint was also driven against the real Kurs API: the first
+call stored 40 rates, the second stored 0.
