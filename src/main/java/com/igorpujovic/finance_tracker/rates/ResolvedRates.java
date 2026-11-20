@@ -1,7 +1,6 @@
 package com.igorpujovic.finance_tracker.rates;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
 
