@@ -2,7 +2,6 @@ package com.igorpujovic.finance_tracker.transaction;
 
 import com.igorpujovic.finance_tracker.category.Category;
 import com.igorpujovic.finance_tracker.category.CategoryRepository;
-import com.igorpujovic.finance_tracker.category.CategoryType;
 import com.igorpujovic.finance_tracker.common.ConflictException;
 import com.igorpujovic.finance_tracker.common.NotFoundException;
 import org.springframework.data.domain.Page;
@@ -106,9 +105,7 @@ public class TransactionService {
         Category category = categories.findById(categoryId)
                 .orElseThrow(() -> new NotFoundException("Category", categoryId));
         TransactionType type = TransactionType.of(amount);
-        boolean compatible = (type == TransactionType.INCOME && category.getType() == CategoryType.INCOME)
-                || (type == TransactionType.EXPENSE && category.getType() == CategoryType.EXPENSE);
-        if (!compatible) {
+        if (!type.canTake(category.getType())) {
             throw new ConflictException("A transaction of type " + type + " cannot take category '"
                     + category.getName() + "', which is " + category.getType());
         }

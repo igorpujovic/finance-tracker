@@ -1,5 +1,7 @@
 package com.igorpujovic.finance_tracker.transaction;
 
+import com.igorpujovic.finance_tracker.category.CategoryType;
+
 import java.math.BigDecimal;
 
 /**
@@ -16,5 +18,17 @@ public enum TransactionType {
             throw new IllegalArgumentException("A transaction amount must not be zero: it would have no type");
         }
         return amount.signum() > 0 ? INCOME : EXPENSE;
+    }
+
+    /**
+     * ADR-0004's compatibility rule, stated once. A transaction of a given type can take
+     * a category of exactly one type, and this answers both halves of the ADR: which
+     * rules are candidates at all, and whether a category asked for by hand is allowed.
+     */
+    public boolean canTake(CategoryType categoryType) {
+        return switch (this) {
+            case INCOME -> categoryType == CategoryType.INCOME;
+            case EXPENSE -> categoryType == CategoryType.EXPENSE;
+        };
     }
 }

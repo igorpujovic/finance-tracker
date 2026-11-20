@@ -202,7 +202,7 @@ class ImportApiTest extends PostgresTest {
     }
 
     @Test
-    @DisplayName("an imported transaction is marked as imported, tied to its batch, and left uncategorized")
+    @DisplayName("an imported transaction is marked as imported and tied to its batch")
     void writesImportedTransactions() throws Exception {
         long batchId = importing(upload("clean.csv", fixture("clean.csv"))).get("id").asLong();
 
@@ -220,11 +220,88 @@ class ImportApiTest extends PostgresTest {
                 .andExpect(jsonPath("$.content[?(@.description == 'MAXI 245 BEOGRAD')].type")
                         .value("EXPENSE"));
 
-        // Uncategorized is a real state with its own filter, not an absence. Step 3 of
-        // the roadmap is what starts emptying this.
+        // Every line of this statement carries a keyword the seeded rules know, so the
+        // uncategorized queue — a real state with its own filter — is empty.
         mvc.perform(get("/api/transactions").param("uncategorized", "true"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(3));
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    @DisplayName("the sample statement arrives categorized by the seeded rules, with nothing left over")
+    void categorizesWhatItImports() throws Exception {
+        importing(upload("sample.csv", fixture("sample.csv")));
+
+        mvc.perform(get("/api/transactions"))
+                .andExpect(status().isOk())
+                // The three lines of the file that survive parsing and conversion. Pinned
+                // here so that a row quietly dropped cannot leave the uncategorized count
+                // below looking like success.
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.content[?(@.description == 'PLATA OKTOBAR')].categoryName")
+                        .value("Salary"))
+                .andExpect(jsonPath("$.content[?(@.description == 'MAXI 245 BEOGRAD')].categoryName")
+                        .value("Food"))
+                .andExpect(jsonPath("$.content[?(@.description == 'EPS SNABDEVANJE')].categoryName")
+                        .value("Utilities"));
+
+        mvc.perform(get("/api/transactions").param("uncategorized", "true"))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    @DisplayName("BUS PLUS is Transport, on a statement whose date the parser accepts")
+    void categorizesTransport() throws Exception {
+        // The BUS PLUS line of sample.csv is dated 31.11.2026 and is rejected for it,
+        // so the keyword needs a line that survives parsing to be matched at all.
+        importing(upload("travel.csv", """
+                date,description,amount,currency
+                30.11.2026,BUS PLUS DOPUNA,-1500.00,RSD
+                """));
+
+        mvc.perform(get("/api/transactions"))
+                .andExpect(jsonPath("$.content[0].description").value("BUS PLUS DOPUNA"))
+                .andExpect(jsonPath("$.content[0].categoryName").value("Transport"));
+    }
+
+    @Test
+    @DisplayName("a line no keyword matches is imported uncategorized rather than refused")
+    void importsWhatNoRuleClaims() throws Exception {
+        JsonNode batch = importing(upload("unknown.csv", """
+                date,description,amount,currency
+                09.11.2026,NEPOZNATI TRGOVAC 77,-800.00,RSD
+                """));
+
+        assertThat(batch.get("importedRows").asInt()).isEqualTo(1);
+        assertThat(batch.get("rejectedRows").asInt()).isZero();
+
+        mvc.perform(get("/api/transactions").param("uncategorized", "true"))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].description").value("NEPOZNATI TRGOVAC 77"))
+                .andExpect(jsonPath("$.content[0].categoryId").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("a refund is not filed under the expense category its merchant keyword points at")
+    void doesNotFileARefundAsAnExpense() throws Exception {
+        // ADR-0004 where it actually bites: the same merchant, a positive amount. The
+        // seeded POVRACAJ rule is income and outranks nothing it needs to, so the
+        // refund lands in Refunds; the MAXI line next to it has no income rule to save
+        // it and stays in the queue.
+        importing(upload("refunds.csv", """
+                date,description,amount,currency
+                10.11.2026,EPS SNABDEVANJE POVRACAJ,4870.00,RSD
+                11.11.2026,MAXI 245 BEOGRAD POVRAT ROBE,2450.80,RSD
+                """));
+
+        mvc.perform(get("/api/transactions"))
+                .andExpect(jsonPath("$.content[?(@.description == 'EPS SNABDEVANJE POVRACAJ')].categoryName")
+                        .value("Refunds"));
+
+        mvc.perform(get("/api/transactions").param("uncategorized", "true"))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].description").value("MAXI 245 BEOGRAD POVRAT ROBE"))
+                .andExpect(jsonPath("$.content[0].categoryId").doesNotExist());
     }
 
     @Test

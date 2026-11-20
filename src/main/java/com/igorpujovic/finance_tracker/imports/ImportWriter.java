@@ -1,7 +1,10 @@
 package com.igorpujovic.finance_tracker.imports;
 
+import com.igorpujovic.finance_tracker.rule.Categorization;
+import com.igorpujovic.finance_tracker.rule.RuleService;
 import com.igorpujovic.finance_tracker.transaction.Transaction;
 import com.igorpujovic.finance_tracker.transaction.TransactionRepository;
+import com.igorpujovic.finance_tracker.transaction.TransactionType;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,12 +26,14 @@ class ImportWriter {
     private final ImportBatchRepository batches;
     private final ImportErrorRepository errors;
     private final TransactionRepository transactions;
+    private final RuleService rules;
 
     ImportWriter(ImportBatchRepository batches, ImportErrorRepository errors,
-                 TransactionRepository transactions) {
+                 TransactionRepository transactions, RuleService rules) {
         this.batches = batches;
         this.errors = errors;
         this.transactions = transactions;
+        this.rules = rules;
     }
 
     /**
@@ -44,6 +49,12 @@ class ImportWriter {
         ImportBatch batch = batches.save(new ImportBatch(
                 fileName, totalRows, imported.size(), duplicateRows, rejected.size()));
 
+        // Read once for the whole statement, not once per line. The rules are a local
+        // query rather than the kind of call ADR-0005 keeps outside this transaction:
+        // what that ordering exists to prevent is an HTTP request made while a database
+        // transaction is held, and a rule set is neither slow nor able to fail halfway.
+        Categorization categorization = rules.currentCategorization();
+
         for (ResolvedLine resolved : imported) {
             SourceLine line = resolved.line();
             transactions.save(Transaction.imported(
@@ -52,10 +63,12 @@ class ImportWriter {
                     line.amount(),
                     line.currency(),
                     resolved.amountRsd(),
-                    // Step 3 of the roadmap matches a rule here. Until then an imported
-                    // transaction arrives uncategorized, which is a real state with its
-                    // own filter, not a gap.
-                    null,
+                    // ADR-0004: the rules that cannot legally take this line are not
+                    // candidates, so a line nothing compatible claims is written
+                    // uncategorized — a real state with its own filter, not a gap.
+                    categorization
+                            .categoryFor(line.description(), TransactionType.of(line.amount()))
+                            .orElse(null),
                     batch.getId(),
                     line.fingerprint()));
         }

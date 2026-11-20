@@ -109,6 +109,25 @@ class TransactionApiTest extends PostgresTest {
     }
 
     @Test
+    @DisplayName("changing the category by hand is refused across types, with the reason")
+    void refusesMismatchedCategoryOnPatch() throws Exception {
+        long id = create(body(LocalDate.of(2026, 11, 3), "MAXI", "-500.00", "RSD", idOf("Food")));
+
+        // ADR-0004 draws the line in two places. A rule that cannot apply is skipped in
+        // silence; a person naming an income category for an expense is told why not,
+        // and the category they already had is left alone.
+        mvc.perform(patch("/api/transactions/" + id + "/category")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categoryId\":" + idOf("Salary") + "}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Salary")));
+
+        mvc.perform(get("/api/transactions/" + id))
+                .andExpect(jsonPath("$.categoryName").value("Food"));
+    }
+
+    @Test
     @DisplayName("listing defaults to twenty per page, newest first")
     void listDefaults() throws Exception {
         create(body(LocalDate.of(2026, 11, 1), "PLATA OKTOBAR", "95000.00", "RSD", idOf("Salary")));
