@@ -48,6 +48,8 @@ rather than silently wrong — and the fix was right. This is a different failur
 - A dozen consecutive clean builds produce no class file naming a project class without its
   package.
 - The full test suite passes without a retry.
+- The editor still resolves the generated metamodel. A green `mvn clean test` is not the whole
+  of "the build works" — this one was learned the hard way, see below.
 - The reason the compiler plugin is configured the way it is, is written down.
 
 ## Comments
@@ -76,10 +78,17 @@ execution was included: 3/6), and forking without the second pass (1/12 — much
 fixed). The first of those is worth remembering as a lesson: measuring only the first half of
 the build made a flag that does nothing look like a cure.
 
-The generated sources moved from `generated-sources/annotations` to
-`generated-sources/metamodel`, because each compiler execution clears its own generated
-directory before running and the two passes were deleting each other's work. That cost an hour
-of a build that compiled 48 sources and then could not find `Transaction_`.
+Each compiler execution clears its own generated-sources directory before running, so the two
+passes were deleting each other's work. That cost an hour of a build that compiled 48 sources
+and then could not find `Transaction_`.
+
+Moving the metamodel out of `generated-sources/annotations` to solve that was the wrong half to
+move, and it broke the editor: the build stayed green while the Java language server reported
+334 unresolved-symbol errors, because an IDE resolves `Transaction_` by looking in the
+conventional directory and the metamodel was no longer in it. The metamodel stays where it was;
+the pass that compiles is the one pointed at a scratch directory it never writes to, and
+`annotationProcessorPaths` stays declared for the plugin so an IDE can still find the processor.
+The lesson is that `mvn clean test` passing is not the whole of "the build works".
 
 How to check it, if this is ever suspected again — the detector that drove every number above
 greps the compiled classes for a descriptor naming a project class with no package:

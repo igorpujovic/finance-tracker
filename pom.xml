@@ -138,13 +138,24 @@
 					     compilation that is not the first in its JVM is the one that writes
 					     the broken class files. -->
 					<fork>true</fork>
+					<!-- Declared for the plugin rather than for the one execution that uses
+					     it, so that an IDE reading this pom can find the processor and
+					     generate the metamodel for itself. The two executions that compile
+					     run with `proc` off and ignore it. -->
+					<annotationProcessorPaths>
+						<path>
+							<groupId>org.hibernate.orm</groupId>
+							<artifactId>hibernate-jpamodelgen</artifactId>
+							<version>${hibernate.version}</version>
+						</path>
+					</annotationProcessorPaths>
 				</configuration>
 				<executions>
 					<!-- Pass one: run the processor and write the metamodel sources. Nothing
 					     is compiled to class files here, so nothing it writes can be wrong.
-					     Its own directory, not generated-sources/annotations, because every
-					     compiler execution clears its generated-sources directory before it
-					     runs: sharing one would have pass two delete what pass one wrote. -->
+					     It writes to the conventional generated-sources/annotations, which is
+					     the path an IDE looks in: put the metamodel anywhere else and the
+					     editor cannot resolve `Transaction_` even though the build can. -->
 					<execution>
 						<id>metamodel</id>
 						<phase>generate-sources</phase>
@@ -153,32 +164,29 @@
 						</goals>
 						<configuration>
 							<proc>only</proc>
-							<generatedSourcesDirectory>
-								${project.build.directory}/generated-sources/metamodel
-							</generatedSourcesDirectory>
-							<annotationProcessorPaths>
-								<path>
-									<groupId>org.hibernate.orm</groupId>
-									<artifactId>hibernate-jpamodelgen</artifactId>
-									<version>${hibernate.version}</version>
-								</path>
-							</annotationProcessorPaths>
 						</configuration>
 					</execution>
 					<!-- Pass two: compile the sources and the generated metamodel together,
 					     with the processor switched off. ADR-0007: it is annotation
 					     processing in the same javac run that corrupts the class files, and
 					     a run with no processing rounds has never done it. The source roots
-					     are named because the directory above is registered by the execution
-					     that generates into it, which is no longer this one. -->
+					     are named because the generated directory is registered as one by
+					     the execution that generates into it, which is no longer this one.
+					     Its own generated directory points at a scratch path it will never
+					     write to, because a compiler execution clears that directory before
+					     it runs and this one would otherwise delete the metamodel pass one
+					     just generated. -->
 					<execution>
 						<id>default-compile</id>
 						<configuration>
 							<proc>none</proc>
 							<compileSourceRoots>
 								<root>${project.basedir}/src/main/java</root>
-								<root>${project.build.directory}/generated-sources/metamodel</root>
+								<root>${project.build.directory}/generated-sources/annotations</root>
 							</compileSourceRoots>
+							<generatedSourcesDirectory>
+								${project.build.directory}/generated-sources/nothing-to-generate
+							</generatedSourcesDirectory>
 						</configuration>
 					</execution>
 					<!-- No entity lives in src/test/java, so there is no metamodel to

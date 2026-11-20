@@ -30,12 +30,18 @@ with `proc:none` over the sources and the generated directory together, and `<fo
 gives each compilation a `javac` of its own. Together: no corruption in twenty-four clean
 builds, against a baseline of five in eight.
 
-The generated sources go to `target/generated-sources/metamodel` rather than the conventional
-`generated-sources/annotations`, because each compiler execution clears its own generated
-directory before it runs, and sharing one would have the second pass delete what the first
-wrote. The second pass names its source roots explicitly for the same reason the first needs a
-directory of its own: the directory is registered as a source root by the execution that
-generates into it, and that is no longer the execution that compiles.
+Each compiler execution clears its own generated-sources directory before it runs, so the two
+passes cannot share one: the second would delete what the first wrote. The metamodel stays at
+the conventional `target/generated-sources/annotations` — an IDE resolves `Transaction_` by
+looking there, and moving it is how you get a project that builds on the command line and shows
+hundreds of unresolved symbols in the editor. It is the *second* pass that is pointed at a
+scratch directory instead, one it never writes to. The second pass also names its source roots
+explicitly, because the generated directory is registered as a source root by the execution
+that generates into it, and that is no longer the execution that compiles.
+
+`annotationProcessorPaths` stays declared for the plugin rather than for the one execution that
+uses it, for the same editor: an IDE reads the pom to find the processor and generate the
+metamodel itself. The executions that compile switch `proc` off and ignore it.
 
 Rejected alternatives: pinning `maven-compiler-plugin` to 3.14.0 (identical failure rate),
 `-XDuseUnsharedTable=false` (no effect once the compiler is reused), and forking alone, which
