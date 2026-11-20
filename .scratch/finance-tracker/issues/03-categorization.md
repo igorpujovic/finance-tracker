@@ -65,6 +65,7 @@ Three things were worth more than the line of code they cost:
   wired in by hand. Left alone deliberately — it predates this step, it is not categorization,
   and guessing at it inside this issue would bury a real build problem in a feature commit. It
   wants its own issue. Until then a build that fails this way is fixed by running it again.
+  **Since resolved as 07**, which found two causes rather than one: see ADR-0007.
 - **One order, used twice.** `GET /api/rules` and the matcher ranked rules differently at first
   — `priority desc, keyword asc` against `priority desc, id asc` — so the list could show one
   rule first and a tie could be won by another. They now share all three keys, so the rule the
