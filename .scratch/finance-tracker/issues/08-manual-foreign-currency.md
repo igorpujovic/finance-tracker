@@ -193,3 +193,29 @@ Considered and declined, with reasons, rather than silently:
 - **`PUT` with `categoryId: null` still clears a category a rule assigned.** True, and now
   reachable on an imported row. It is the documented meaning of a full replacement on this API
   and it predates this ticket; it is not a currency question and is left alone deliberately.
+
+### Closed
+
+`7fb8178` on `main`, pushed. CI green on the push: `mvn verify` 44s, `docker compose up` 1m19s,
+and the ADR-0007 detector found no miscompiled class file.
+
+Verified against the running stack as well as the suite, because the suite fakes Kurs at the HTTP
+boundary by design (ADR-0006) and the one thing it therefore cannot show is that the real National
+Bank answers this path. `docker compose up --build --wait` on an empty volume, then:
+
+- the dinar statement imports and the monthly report comes back with the seeded category names —
+  the acceptance criterion of 06, unaffected by this change but re-run because the import path's
+  converter moved;
+- `POST /api/transactions` with `-1200.00 RSD` is 201 at its own value, asking for no rate;
+- **`POST /api/transactions` with `-9.99 EUR` on 2026-11-04 is 201 and `amountRsd: -1174.84`** —
+  the live rate for that date, fetched on demand for a date nothing had on file. That is the exact
+  request this ticket opened with, and the 400 it opened with is gone. The value agrees with the
+  `-1174.84` the README's sample report already showed for the same euro line through the import
+  path, which is the point of the ticket: the two doors now say the same thing about what a euro
+  is worth.
+- `PUT` on that row with the currency it came with is 200, the description changed and the dinar
+  amount unmoved.
+
+A note for whoever reads the tracker next: `resolved` is not one of the five labels in
+`docs/agents/triage-labels.md`, but all eight issues here use it. The doc is stale, not these
+files — worth a line in that doc rather than eight edits here.
