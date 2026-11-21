@@ -32,8 +32,22 @@ jobs:
           # does not re-download Boot, Hibernate and Testcontainers.
           cache: maven
 
+      # The client is part of the Maven build (ADR-0008), so this job compiles and tests it
+      # too. `setup-node` is here only for its npm cache: the build downloads its own Node,
+      # pinned in the pom, and does not use the one this step installs — which is the point,
+      # because the version CI builds with must be the version `docker compose` builds with.
+      - name: Set up Node for the npm cache
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
       # `verify`, not `test`: it packages the jar as well, so a build that cannot produce
       # the artifact the Dockerfile copies fails here rather than at `docker compose up`.
+      # It runs both suites — 174 Java tests and the client's vitest run — and typechecks
+      # the client before bundling it, so a TypeScript error is a red build here and not a
+      # blank page later.
       # Nothing here overrides the pom's two-pass forked compile — read ADR-0007 before
       # adding anything clever to this line.
       - name: Build and test
@@ -88,7 +102,10 @@ jobs:
       # is answering requests rather than merely running.
       #
       # Tests are skipped inside the image build: the `build` job ran them, and running
-      # them there would need a Docker daemon inside the build container.
+      # the Java ones there would need a Docker daemon inside the build container. The
+      # client's tests are skipped alongside them, by `-Dfrontend.test.skip=true` in the
+      # Dockerfile — Maven's own `-DskipTests` is not a flag frontend-maven-plugin reads.
+      # The client is still *built* there, because the image would otherwise have no UI.
       - name: Build the image and start the stack
         run: docker compose up -d --build --wait --wait-timeout 300
 
@@ -123,6 +140,29 @@ jobs:
           case "$report" in
             *'"categoryName":"Utilities"'*) ;;
             *) echo "The report came back without the seeded category names."; exit 1 ;;
+          esac
+
+      # The client is in the same jar and on the same port (ADR-0008), so the stack that
+      # serves the API has to be serving the page too. Three things are asserted, because
+      # the ways this breaks are distinct: the page is missing from the jar, a client route
+      # 404s on reload, or the catch-all that fixes that has started swallowing the API.
+      - name: The stack serves the client as well as the API
+        run: |
+          shell=$(curl --fail --silent --show-error http://localhost:8080/)
+          case "$shell" in
+            *'<div id="root">'*) ;;
+            *) echo "GET / did not return the client's shell:"; echo "$shell"; exit 1 ;;
+          esac
+
+          # A client route, as a reload would ask for it: HTML, not a 404.
+          curl --fail --silent --show-error http://localhost:8080/transactions > /dev/null
+
+          # And the API still answers with JSON rather than with that HTML.
+          type=$(curl --silent --output /dev/null --write-out '%{content_type}' \
+            http://localhost:8080/api/categories)
+          case "$type" in
+            application/json*) ;;
+            *) echo "The SPA forward is shadowing the API: /api/categories returned $type"; exit 1 ;;
           esac
 
       - name: Show the application log on failure

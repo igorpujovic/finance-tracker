@@ -18,6 +18,22 @@
 		<java.version>21</java.version>
 		<commons-csv.version>1.14.1</commons-csv.version>
 		<springdoc.version>3.2.0</springdoc.version>
+
+		<!-- The client (ADR-0008). Node is downloaded by the build rather than
+		     required of the machine, so `./mvnw package` and `docker compose up`
+		     need the same thing of a contributor as they did before the frontend
+		     existed: a JDK, or nothing but Docker.
+
+		     `./mvnw test -P backend-only` skips the client entirely for
+		     backend-only work. The jar that profile produces has no UI in it, so
+		     it is for a fast test loop and not for anything that gets shipped.
+		     Prefer the profile over setting these two by hand: skipping the
+		     install without also skipping the test run would leave `npm test` to
+		     be invoked with no node_modules to run it. -->
+		<frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
+		<node.version>v22.22.2</node.version>
+		<frontend.skip>false</frontend.skip>
+		<frontend.test.skip>false</frontend.test.skip>
 	</properties>
 
 	<dependencies>
@@ -119,10 +135,108 @@
 	</dependencies>
 
 	<build>
+		<!-- Declared because the client's build output has to join the jar's
+		     static resources, and declaring `<resources>` at all replaces the
+		     default — so `src/main/resources` is named here as well. Dropping it
+		     would quietly take the Flyway migrations and
+		     application.properties out of the jar. -->
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+			</resource>
+			<!-- Spring serves `static/` from the classpath, so the built client
+			     lands at `/` with no controller and no configuration. Written by
+			     the Vite build during generate-resources, which runs before this
+			     is copied in process-resources. When the client build is skipped
+			     this directory does not exist, and Maven passes over a missing
+			     resource directory with a notice rather than a failure. -->
+			<resource>
+				<directory>frontend/dist</directory>
+				<targetPath>static</targetPath>
+			</resource>
+		</resources>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!-- Builds the React client into `frontend/dist` (ADR-0008).
+			     Deliberately part of the Maven build rather than a stage in the
+			     Dockerfile: CI runs `./mvnw verify`, and a client built only by
+			     Docker would be a client CI never compiles, in a jar that
+			     differs from the one `docker compose` ships.
+
+			     Bound to generate-resources, which sits between the two compiler
+			     executions of ADR-0007 and forks no javac of its own — nothing
+			     here affects that arrangement. -->
+			<plugin>
+				<groupId>com.github.eirslett</groupId>
+				<artifactId>frontend-maven-plugin</artifactId>
+				<version>${frontend-maven-plugin.version}</version>
+				<configuration>
+					<workingDirectory>frontend</workingDirectory>
+					<nodeVersion>${node.version}</nodeVersion>
+					<skip>${frontend.skip}</skip>
+				</configuration>
+				<executions>
+					<!-- Node and npm are installed into `frontend/node`, which is
+					     git-ignored. Not under `target/`, on purpose: `mvn clean`
+					     would then throw away a 30 MB download that no source
+					     change can invalidate. -->
+					<execution>
+						<id>install-node-and-npm</id>
+						<phase>generate-resources</phase>
+						<goals>
+							<goal>install-node-and-npm</goal>
+						</goals>
+					</execution>
+					<!-- `ci`, not `install`: it installs exactly what
+					     package-lock.json pins and fails if the lockfile and
+					     package.json disagree, which is what a reproducible build
+					     wants and what `install` would quietly paper over. -->
+					<execution>
+						<id>npm-ci</id>
+						<phase>generate-resources</phase>
+						<goals>
+							<goal>npm</goal>
+						</goals>
+						<configuration>
+							<arguments>ci</arguments>
+						</configuration>
+					</execution>
+					<!-- `npm run build` typechecks before it bundles, so a type
+					     error in the client fails this build rather than shipping
+					     a page that breaks in the browser. -->
+					<execution>
+						<id>npm-build</id>
+						<phase>generate-resources</phase>
+						<goals>
+							<goal>npm</goal>
+						</goals>
+						<configuration>
+							<arguments>run build</arguments>
+						</configuration>
+					</execution>
+					<!-- The client's own tests, in the phase Maven runs tests in,
+					     so that `./mvnw verify` means "everything is green" on
+					     both sides of the project rather than only the Java one. -->
+					<execution>
+						<id>npm-test</id>
+						<phase>test</phase>
+						<goals>
+							<goal>npm</goal>
+						</goals>
+						<configuration>
+							<arguments>run test</arguments>
+							<!-- Its own switch rather than the plugin-wide one,
+							     because the image build wants the client built
+							     and its tests skipped: the Dockerfile passes
+							     `-Dfrontend.test.skip=true` beside Maven's own
+							     `-DskipTests`, which this plugin does not read. -->
+							<skip>${frontend.test.skip}</skip>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 			<!-- Generates Category_, Transaction_ and friends, so queries and sorts name
 			     entity properties through compiled attributes instead of string literals:
@@ -228,5 +342,18 @@
 			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!-- Backend-only work: no Node download, no client build, no client
+		     tests. One switch, so that the install and the test run cannot be
+		     skipped out of step with each other. -->
+		<profile>
+			<id>backend-only</id>
+			<properties>
+				<frontend.skip>true</frontend.skip>
+				<frontend.test.skip>true</frontend.test.skip>
+			</properties>
+		</profile>
+	</profiles>
 
 </project>

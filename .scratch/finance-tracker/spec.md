@@ -259,9 +259,12 @@ top-expenses limit 10 (max 100), negative amounts only, uncategorized included.
 
 ## Roadmap
 
-Six steps. Step 7 of the original — user accounts or a dashboard frontend — is out of scope: the
-sibling portfolio project already demonstrates JWT and a React client, and the time is better
-spent on the pipeline, which is what this project is arguing.
+Seven steps. Step 7 of the original was two things — user accounts *or* a dashboard frontend —
+and they are answered separately. The frontend was built, as step 7 below; user accounts were
+not, and are not planned. The original reason for dropping both was that a sibling portfolio
+project already demonstrates JWT and a React client, which remains the reason there is no
+authentication here, but was never a reason for the pipeline to have no way of being used
+except `curl`.
 
 1. **Setup** — project config, compose, first migration, seed data, CRUD for categories and
    transactions
@@ -270,6 +273,8 @@ spent on the pipeline, which is what this project is arguing.
 4. **Exchange rates** — Kurs client, scheduled job, on-demand backfill, conversion
 5. **Reports** — monthly, comparison, top expenses, CSV export
 6. **Quality** — tests, Dockerfile, GitHub Actions, README
+7. **Frontend** — a React client over all 23 endpoints, built by Maven and served from the jar
+   ([ADR-0008](../../docs/adr/0008-the-client-is-built-by-maven-and-served-from-the-jar.md))
 
 ## Deviations from the original specification
 
@@ -291,4 +296,5 @@ spent on the pipeline, which is what this project is arguing.
 | 14 | `spring-boot-docker-compose` removed, `app` service added | `docker compose up` must run the app, not just the database |
 | 15 | Seeded categories and rules ship in migrations | The categorization feature is otherwise invisible on first run |
 | 16 | Both Scalar and Swagger UI served | Verified non-conflicting |
-| 17 | Step 7 dropped | Covered by the sibling project |
+| 17 | ~~Step 7 dropped~~ — **superseded.** Only its user-accounts half is dropped; the frontend was built in step 7 | The sibling project covers JWT, which is why there is still no authentication. It does not cover this pipeline, which had no interface but `curl` |
+| 18 | The client is built by Maven and served from the application's own jar | ADR-0008. One artifact and one origin, so there is no CORS configuration and no second service to start |

@@ -2,8 +2,8 @@
 
 [![build](https://github.com/igorpujovic/finance-tracker/actions/workflows/build.yml/badge.svg)](https://github.com/igorpujovic/finance-tracker/actions/workflows/build.yml)
 
-A REST API that imports bank statements from CSV files, cleans and categorizes the transactions,
-and reports monthly spending in Serbian dinars.
+A web application and REST API that imports bank statements from CSV files, cleans and
+categorizes the transactions, and reports monthly spending in Serbian dinars.
 
 It is a small ETL pipeline with a REST surface: rows are extracted from a statement, validated and
 converted, loaded into PostgreSQL, and reported on with SQL aggregations. Everything a statement
@@ -11,9 +11,11 @@ does is explainable afterwards — every upload keeps its summary and its reject
 with the reason each one was refused.
 
 **Stack**: Java 21, Spring Boot 4.2, Spring Data JPA, PostgreSQL 18, Flyway, Apache Commons CSV,
-springdoc-openapi, JUnit 5, Testcontainers, Docker Compose, GitHub Actions.
+springdoc-openapi, JUnit 5, Testcontainers, Docker Compose, GitHub Actions — and a React 19 +
+TypeScript client, built by Maven into the application's own jar.
 
 - [Run it](#run-it)
+- [The web client](#the-web-client)
 - [Two things that read as bugs](#two-things-that-read-as-bugs)
 - [The sample statement](#the-sample-statement)
 - [API](#api)
@@ -37,7 +39,10 @@ That builds the application, starts PostgreSQL 18, runs the Flyway migrations �
 categories and seven categorization rules, so the pipeline has something to categorize with on the
 first run — and waits until the API actually answers requests.
 
-Upload the sample statement and read the report it produces:
+Then open **<http://localhost:8080>** and drop a statement on the Import page —
+`src/test/resources/statements/sample.csv` is in this repository and is deliberately imperfect.
+
+The same thing without a browser — upload the sample statement and read the report it produces:
 
 ```sh
 curl -F file=@src/test/resources/statements/sample.csv http://localhost:8080/api/imports
@@ -73,6 +78,54 @@ beyond the two containers.
 Credentials default to `finance` / `finance` / `finance_tracker` and are overridable in `.env` —
 copy `.env.example` if you want to change them. `docker compose down -v` removes the data volume
 and returns the database to a fresh clone's state.
+
+## The web client
+
+A React 19 + TypeScript client covering **all 23 endpoints**, so nothing in this project is
+reachable only by `curl`. It is served by the application itself, at `/`, on the same port as the
+API.
+
+![The dashboard: one month's income, expenses and balance, with the category breakdown](docs/images/dashboard.jpg)
+
+| Page | What it does |
+| --- | --- |
+| **Dashboard** | The month's income, expenses and balance, with the category breakdown as a table and a chart |
+| **Transactions** | The paged ledger with all five filters, plus create, edit, delete and a per-row category dropdown |
+| **Import** | Drop a CSV, see the summary, and browse every past upload |
+| **Import detail** | One batch and its rejected lines, verbatim, with the reason each was refused |
+| **Reports** | The comparison against last month, the largest expenses in a window, and the CSV export |
+| **Categories** / **Rules** | CRUD for both, and "apply the rules to every uncategorized transaction" |
+| **Settings** | Download today's exchange rates on demand |
+
+There is **one artifact and one origin**: Maven builds the client into the jar's static
+resources, so `docker compose up` still starts everything, there is no second service, and there
+is no CORS configuration anywhere in this project
+([ADR-0008](docs/adr/0008-the-client-is-built-by-maven-and-served-from-the-jar.md)).
+
+The client renders the two conventions that read as bugs rather than smoothing them over. Nothing
+in it takes an absolute value, and the comparison says out loud which way each row should be read:
+
+![The comparison report, with a plus sign on categories that improved](docs/images/comparison.jpg)
+
+Food is `+2.549,20` and `+50,98%` — *less went out*. Transport and Health stopped entirely and are
+`+100%`; a salary that stopped would be `−100%`. Utilities and Entertainment have no previous
+month to be a percentage of, so their percent is **`—`** and not `0%`. The refund that no rule
+could claim sits in its own **Uncategorized** row, with its money still counted.
+
+### Working on it
+
+```sh
+docker compose up -d postgres     # the database
+./mvnw spring-boot:run            # the API on :8080
+
+cd frontend && npm install
+npm run dev                       # the client on :5173, proxying /api to :8080
+npm test                          # vitest
+```
+
+The dev server proxies `/api` so the client fetches the same relative paths in development as in
+production. `./mvnw test -P backend-only` skips the client entirely when you are working on the
+Java side.
 
 ## Two things that read as bugs
 
@@ -276,18 +329,26 @@ the transaction row, so deleting the row deletes the memory that the source line
 imported, and the next upload of that file imports it again as new. Deletion is a correction of
 the database, not of the statement.
 
-**One user, no accounts, no authentication.** The API is a single person's ledger and is not
-exposed to the internet by this compose file. Users were dropped from the roadmap deliberately:
-the sibling portfolio project already argues JWT and a React client, and the time was better spent
-on the pipeline.
+**One user, no accounts, no authentication.** The API and the web client are a single person's
+ledger, and neither is exposed to the internet by this compose file. Users were dropped from the
+roadmap deliberately: the sibling portfolio project already argues JWT, and adding a login screen
+to an application with nothing to authenticate against would be theatre. Anyone who can reach
+port 8080 can read and change everything, which is a decision and not an oversight.
 
 ## Development
 
 ```sh
 docker compose up -d postgres     # the database alone, for running the app from an IDE
-./mvnw test                       # the whole suite
-./mvnw verify                     # and the jar the Dockerfile copies
+./mvnw test                       # the whole suite — 174 Java tests and 47 client tests
+./mvnw verify                     # and the jar the Dockerfile copies, client included
+./mvnw test -P backend-only       # skip the client: no Node download, no client build
 ```
+
+`./mvnw test` runs both suites, because a client that renders an expense without its minus sign
+is as broken as a query that sums it wrongly, and one command should say so. The client's build
+also typechecks before it bundles, so a TypeScript error fails the Maven build rather than
+reaching the browser. Node is downloaded by the build into `frontend/node` and is not a
+prerequisite ([ADR-0008](docs/adr/0008-the-client-is-built-by-maven-and-served-from-the-jar.md)).
 
 The tests need a Docker daemon: everything query-shaped runs against a real PostgreSQL 18 in
 Testcontainers rather than against an in-memory stand-in
@@ -320,5 +381,5 @@ is faked at the HTTP boundary.
 | File | What it holds |
 | --- | --- |
 | [`GLOSSARY.md`](GLOSSARY.md) | The project's vocabulary — what a *source line*, a *dinar amount* and a *duplicate* mean here |
-| [`docs/adr/`](docs/adr) | The seven decisions that shaped the data model and the build |
+| [`docs/adr/`](docs/adr) | The eight decisions that shaped the data model, the build and the client |
 | [`.scratch/finance-tracker/spec.md`](.scratch/finance-tracker/spec.md) | The specification, its 16 business rules, and the 17 deviations from the original |

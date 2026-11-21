@@ -34,3 +34,11 @@ build/
 
 # Local environment
 .env
+
+### Frontend ###
+# node_modules and the build output; `node/` is the toolchain
+# frontend-maven-plugin downloads (ADR-0008), kept out of target/ so that
+# `mvn clean` does not throw away a download no source change invalidates.
+frontend/node_modules/
+frontend/dist/
+frontend/node/

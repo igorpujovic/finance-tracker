@@ -1,0 +1,671 @@
+/*
+ * One stylesheet, with its decisions at the top as custom properties.
+ *
+ * No CSS framework, deliberately: this project justifies each dependency in a
+ * comment, and a token block is less surface to maintain than a framework's
+ * configuration. Light and dark both come from `light-dark()` against the
+ * viewer's own preference, so there is no theme toggle to keep in sync with
+ * anything and no flash of the wrong colours on load.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Neutrals */
+  --bg: light-dark(#f7f7f8, #16171a);
+  --surface: light-dark(#ffffff, #1e2024);
+  --surface-raised: light-dark(#ffffff, #24262b);
+  --border: light-dark(#e3e4e8, #32353c);
+  --border-strong: light-dark(#c9cbd2, #434750);
+  --text: light-dark(#1a1b1e, #e8e9ec);
+  --text-muted: light-dark(#5f6269, #9a9ea8);
+  --text-faint: light-dark(#8b8e96, #71757e);
+
+  /* Accent — the one hue the chrome uses. */
+  --accent: light-dark(#2f5fd8, #6f94f0);
+  --accent-contrast: #ffffff;
+  --accent-soft: light-dark(#e8eefc, #22304f);
+
+  /*
+   * Money. Income reads positive and expense reads negative, and these are the
+   * only two colours here that carry meaning rather than decoration.
+   *
+   * There are two pairs because text and chart marks are held to different
+   * contrast rules, and one pair cannot satisfy both:
+   *
+   * - **Text** needs 4.5:1 against the surface. These do: 6.20:1 and 6.61:1 on
+   *   white, 7.18:1 and 6.67:1 on the dark surface. The chart-mark red below is
+   *   only 3.95:1 as light-mode text, which is why it is not used for figures.
+   * - **Marks** need 3:1 and, more importantly, enough separation from each
+   *   other under colour-vision deficiency. The pair below is the validated
+   *   green and red of the reference palette, measured rather than chosen by
+   *   eye: CVD ΔE 7.2 light / 7.1 dark, normal-vision 33.1 / 32.2.
+   *
+   * That ΔE sits in the 6–8 band, which is only legal alongside a second,
+   * non-colour encoding — and the chart has three. Bars for income and expense
+   * grow in opposite directions from a zero baseline, so the two are separated
+   * by *position* before colour is considered; every bar is directly labelled;
+   * and the sign is printed on every figure. About one man in twelve cannot
+   * reliably tell red from green, and none of them has to here: nothing in this
+   * UI is distinguished by colour alone.
+   */
+  --income: light-dark(#136f45, #4fc08a);
+  --expense: light-dark(#a8341f, #f08a72);
+  --income-mark: light-dark(#008300, #0ca30c);
+  --expense-mark: light-dark(#e34948, #e66767);
+  --mark-neutral: light-dark(#f0efec, #383835);
+
+  --danger: light-dark(#b3261e, #f2857a);
+  --danger-soft: light-dark(#fdecea, #3b1f1c);
+  --warning: light-dark(#8a5a00, #e0b050);
+  --warning-soft: light-dark(#fdf4e3, #3a2f17);
+  --ok-soft: light-dark(#e7f6ee, #16301f);
+
+  --radius: 8px;
+  --radius-sm: 5px;
+  --shadow: 0 1px 2px light-dark(rgb(0 0 0 / 6%), rgb(0 0 0 / 40%));
+
+  --mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', 'Consolas', monospace;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0;
+  font-weight: 600;
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+h2 {
+  font-size: 1.15rem;
+}
+h3 {
+  font-size: 1rem;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* --- layout ------------------------------------------------------------ */
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0 1.25rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-wrap: wrap;
+}
+
+.brand {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  padding: 0.85rem 0;
+  white-space: nowrap;
+}
+.brand:hover {
+  text-decoration: none;
+}
+
+.nav {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.nav a {
+  padding: 0.85rem 0.7rem;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.nav a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+.nav a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 550;
+}
+
+.topbar .docs-link {
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 4rem;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.page-head p {
+  margin: 0.3rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  max-width: 68ch;
+}
+
+/* --- cards -------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.card > h2,
+.card > h3 {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-body {
+  padding: 1rem;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.grid-3 {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.grid-2 {
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+}
+
+/* --- stat tiles --------------------------------------------------------- */
+
+.stat {
+  padding: 1rem;
+}
+
+.stat .label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.stat .value {
+  font-size: 1.6rem;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.3rem;
+  letter-spacing: -0.02em;
+}
+
+.stat .note {
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  margin-top: 0.2rem;
+}
+
+/* --- money -------------------------------------------------------------- */
+
+.money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.money.income {
+  color: var(--income);
+}
+.money.expense {
+  color: var(--expense);
+}
+
+/* --- tables ------------------------------------------------------------- */
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th {
+  text-align: left;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  background: var(--surface);
+}
+
+td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr:hover {
+  background: light-dark(#fafafb, #22242a);
+}
+
+tfoot td {
+  font-weight: 620;
+  border-top: 2px solid var(--border-strong);
+  border-bottom: none;
+  background: light-dark(#fafafb, #1b1d21);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
+
+/* --- badges ------------------------------------------------------------- */
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.badge.income {
+  color: var(--income);
+  border-color: currentcolor;
+}
+.badge.expense {
+  color: var(--expense);
+  border-color: currentcolor;
+}
+.badge.muted {
+  color: var(--text-faint);
+}
+
+/* The uncategorized row is a real state with real money in it, so it is marked
+   rather than greyed into looking like an absence. */
+.badge.uncategorized {
+  color: var(--warning);
+  border-color: currentcolor;
+  background: var(--warning-soft);
+}
+
+/* --- forms -------------------------------------------------------------- */
+
+label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input[type='text'],
+input[type='number'],
+input[type='date'],
+input[type='file'],
+select {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[aria-invalid='true'],
+select[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.field {
+  margin-bottom: 0.75rem;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+  margin-top: 0.2rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.form-row > * {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.form-row .field {
+  margin-bottom: 0;
+}
+
+.filters {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.filters > div {
+  flex: 0 1 150px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+.checkbox label {
+  margin: 0;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* --- buttons ------------------------------------------------------------ */
+
+button {
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--text-faint);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+button.danger {
+  color: var(--danger);
+  border-color: light-dark(#e6b8b4, #6b3832);
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+button.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0.15rem 0.3rem;
+  font-weight: 500;
+}
+
+button.link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.btn-row {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+a.button {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-weight: 550;
+}
+a.button:hover {
+  text-decoration: none;
+  border-color: var(--text-faint);
+}
+
+/* --- notices ------------------------------------------------------------ */
+
+.notice {
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.notice.error {
+  background: var(--danger-soft);
+  border-color: light-dark(#eebfba, #6b3832);
+  color: light-dark(#7d1d16, #f2a79e);
+}
+
+/* A 503 is the National Bank being unreachable — not the reader's mistake, and
+   worth looking different from one. */
+.notice.unavailable {
+  background: var(--warning-soft);
+  border-color: light-dark(#e3cd95, #5c4a20);
+  color: light-dark(#6b4600, #e8c270);
+}
+
+.notice.ok {
+  background: var(--ok-soft);
+  border-color: light-dark(#b9dfc9, #2a5038);
+  color: light-dark(#0f5c38, #76d3a3);
+}
+
+.notice strong {
+  font-weight: 650;
+}
+
+.notice ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.loading {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 0.9rem;
+}
+
+/* --- pager -------------------------------------------------------------- */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+/* --- month picker ------------------------------------------------------- */
+
+.month-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.month-picker .current {
+  font-weight: 600;
+  min-width: 11ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- import drop zone --------------------------------------------------- */
+
+.dropzone {
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 2rem 1rem;
+  text-align: center;
+  background: var(--surface);
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.dropzone.over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.dropzone p {
+  margin: 0.4rem 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* A rejected line is shown exactly as the file wrote it, so it must not be
+   re-wrapped, re-spaced or prettified. */
+.raw-line {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  background: light-dark(#f4f4f6, #15171a);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.5rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  display: block;
+}
+
+.chart-wrap {
+  width: 100%;
+  height: 300px;
+}
+
+.hint {
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  margin: 0.35rem 0 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

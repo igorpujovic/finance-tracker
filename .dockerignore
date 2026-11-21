@@ -8,3 +8,10 @@ docs/
 .mvn/wrapper/maven-wrapper.jar
 *.md
 .env
+
+# The client's dependencies and build output are produced inside the image by
+# `npm ci` and `npm run build`; copying a host-built `node_modules` in would be
+# slow and could carry the wrong platform's binaries (esbuild is native).
+frontend/node_modules/
+frontend/dist/
+frontend/node/
