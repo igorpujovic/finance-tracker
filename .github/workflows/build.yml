@@ -67,7 +67,7 @@ jobs:
       # when a test did not fail so much as vanish, which is how ADR-0007's bug looked.
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: surefire-reports
           path: target/surefire-reports/
