@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:demo": "tsc --noEmit && vite build --mode demo"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.7",
@@ -30,5 +31,10 @@
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
     "vitest": "^3.2.7"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }

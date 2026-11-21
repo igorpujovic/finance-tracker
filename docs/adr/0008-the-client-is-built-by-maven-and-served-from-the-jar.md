@@ -60,6 +60,34 @@ Three details of that wiring are deliberate:
 than two properties because skipping the install without also skipping the test run would leave
 `npm test` to be invoked with no `node_modules` to run it.
 
+## The demo is a third build, and says so
+
+There is a published demo at `igorpujovic.github.io/finance-tracker`, and it is not this
+application running. It cannot be: the application needs a JVM and a PostgreSQL, and the free way
+to host a repository's page serves static files only. Standing up a real instance was considered
+and rejected on its own terms — there is no authentication here by design, so a public instance
+would be an open ledger anyone could write to, and the free database tiers that would host it
+expire or sleep.
+
+What is published instead is the real client with the network replaced: the same components and
+the same hooks, with MSW answering `/api` from an in-memory store in `frontend/src/demo`, seeded
+so the opening figures are the ones this README pins and the test suite asserts. A visitor can
+import a statement, correct a transaction and re-categorize it, and see the real refusals — a 409
+for deleting a category that still holds money, a 400 naming an unpriced currency.
+
+Two things make this honest rather than a trap. A permanent, undismissable banner says what it is
+and that nothing is saved, because somebody will otherwise import a real statement and wonder
+where it went. And the fake is a liability worth naming: it is a second implementation of rules
+whose truth is the Java, and two copies can disagree. It is kept in check by seeding it from the
+same figures the suite asserts, so drift shows up as a demo that stops matching the documentation.
+
+The demo build is a separate mode, not a separate codebase. `npm run build:demo` sets the base
+path to `/finance-tracker/`, switches on the in-browser API, and publishes the service worker;
+the jar's build does none of those, and the branch that imports the fixtures is behind a flag it
+never sets, so the bundler drops MSW and the seed data out of the shipped bundle entirely. The
+workflow asserts all three are present in the demo bundle before it publishes, because a mode
+flag that silently failed to apply would deploy a client whose every request 404s.
+
 ## What serving a single-page client from Spring costs
 
 Two things need saying, and both are small but not optional.

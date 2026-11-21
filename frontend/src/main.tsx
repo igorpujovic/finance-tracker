@@ -28,12 +28,41 @@ const queryClient = new QueryClient({
 const root = document.getElementById('root');
 if (!root) throw new Error('index.html is missing its #root element');
 
-createRoot(root).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </QueryClientProvider>
-  </StrictMode>,
-);
+/**
+ * The GitHub Pages demo has no server, so a service worker answers the API in
+ * its place. The import is dynamic and behind the flag so that the demo's
+ * fixtures and MSW itself are not in the bundle the application ships — the
+ * real build never evaluates this branch, and Rollup drops the whole subtree.
+ *
+ * It is awaited before the first render: starting the worker is asynchronous,
+ * and a component that fetched before it was listening would get a real 404
+ * from GitHub Pages instead of the fake answer.
+ */
+async function startDemoApi() {
+  if (!import.meta.env.VITE_DEMO) return;
+  const [{ setupWorker }, { handlers }] = await Promise.all([
+    import('msw/browser'),
+    import('./demo/handlers'),
+  ]);
+  await setupWorker(...handlers).start({
+    serviceWorker: { url: `${import.meta.env.BASE_URL}mockServiceWorker.js` },
+    quiet: true,
+    // Anything this client does not ask for is not the worker's business.
+    onUnhandledRequest: 'bypass',
+  });
+}
+
+startDemoApi().then(() => {
+  createRoot(root).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        {/* The router is told the base path so that the demo, which is served
+            from a subdirectory, builds its links correctly. It is `/` for the
+            real build, which is what BrowserRouter assumes anyway. */}
+        <BrowserRouter basename={import.meta.env.BASE_URL}>
+          <App />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+});

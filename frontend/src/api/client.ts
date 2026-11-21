@@ -53,8 +53,15 @@ export class ApiError extends Error {
  * because the Vite dev server proxies this prefix (ADR-0008). Making this
  * absolute would be the first step towards needing CORS, which this project
  * does not have and does not need.
+ *
+ * Relative *to the page's base path*, which is `/` everywhere the real
+ * application runs and resolves to exactly `/api` there. The one exception is
+ * the GitHub Pages demo, served from a subdirectory with no server behind it:
+ * there the API is faked by a service worker, and a service worker can only
+ * intercept requests inside its own scope — so the requests have to be made
+ * under the same prefix the page was served from.
  */
-const BASE = '/api';
+const BASE = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`;
 
 type Query = Record<string, string | number | boolean | undefined | null>;
 

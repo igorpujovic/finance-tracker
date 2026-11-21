@@ -1,4 +1,5 @@
 import { NavLink, Route, Routes } from 'react-router-dom';
+import { DemoBanner } from './demo/DemoBanner';
 import { Dashboard } from './routes/Dashboard';
 import { Transactions } from './routes/Transactions';
 import { Import } from './routes/Import';
@@ -18,6 +19,7 @@ import { Settings } from './routes/Settings';
 export default function App() {
   return (
     <div className="app">
+      {import.meta.env.VITE_DEMO ? <DemoBanner /> : null}
       <header className="topbar">
         <NavLink to="/" className="brand">
           finance-tracker

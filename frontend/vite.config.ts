@@ -14,8 +14,31 @@ import react from '@vitejs/plugin-react';
  * is what keeps it from being a third configuration to maintain: the client
  * always fetches a relative `/api/...` path, in development as in production.
  */
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  /**
+   * `/` for the real build, which Maven copies into the jar's static
+   * resources and Spring serves from the root.
+   *
+   * The GitHub Pages demo is served from `/<repository>/`, which for this
+   * repository is `/finance-tracker/`. Everything that needs to know — the
+   * asset URLs, the router's basename, the service worker's scope and the path
+   * the client fetches the API on — reads it from `import.meta.env.BASE_URL`
+   * rather than repeating it, so this is the only line that states it.
+   *
+   * Written here rather than passed on the command line so that
+   * `npm run build:demo` produces a publishable demo on its own, and the
+   * workflow has no argument it can get wrong.
+   */
+  base: mode === 'demo' ? '/finance-tracker/' : '/',
+  /**
+   * `public/` holds exactly one file, MSW's generated service worker, and it
+   * is of no use to the real application — copying it in would put a worker
+   * that never registers inside the jar. It is therefore published only by the
+   * demo build. Anything genuinely static and wanted in both (a favicon, say)
+   * cannot simply be dropped in here; it needs this made conditional per file.
+   */
+  publicDir: mode === 'demo' ? 'public' : false,
   server: {
     port: 5173,
     proxy: {
@@ -40,4 +63,4 @@ export default defineConfig({
     setupFiles: './src/test-setup.ts',
     css: false,
   },
-});
+}));

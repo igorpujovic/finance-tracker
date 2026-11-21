@@ -669,3 +669,21 @@ a.button:hover {
   white-space: nowrap;
   border: 0;
 }
+
+/* --- demo banner -------------------------------------------------------- */
+
+/* Only ever rendered by the GitHub Pages build. Deliberately not dismissible:
+   a visitor who scrolls past it and then imports a real statement should still
+   be able to find out why their data vanished on reload. */
+.demo-banner {
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--accent);
+  color: var(--text);
+  padding: 0.5rem 1.25rem;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.demo-banner strong {
+  font-weight: 650;
+}

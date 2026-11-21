@@ -1,0 +1,106 @@
+# Publishes the GitHub Pages demo: the real client, with the API faked in the
+# browser by MSW and seeded from the sample statement (see frontend/src/demo).
+#
+# The application itself cannot be hosted this way — it needs a JVM and a
+# PostgreSQL — so what is published is deliberately not "finance-tracker
+# running". It is the client, with a banner that says so, which is enough to
+# show what the pipeline produces without standing up an unauthenticated
+# ledger on the public internet.
+name: demo
+
+on:
+  push:
+    branches: [main]
+    # The demo is only rebuilt when something it is made of changes. Nothing in
+    # src/main/java can alter a bundle that has no server behind it.
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/demo.yml'
+  workflow_dispatch:
+
+# The three the deploy needs and nothing else: `id-token` is what lets
+# actions/deploy-pages prove to Pages that this run is allowed to publish.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and queued rather than cancelled: cancelling a run
+# that is midway through publishing can leave the site on a half-uploaded
+# artifact.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build the demo bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      # Node is installed directly here rather than through the Maven plugin.
+      # This job builds no jar and needs no JDK, and the demo bundle is not the
+      # artifact the application ships — that one is still built by Maven
+      # (ADR-0008), and the `build` workflow is what guards it.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      # The same vitest run the Maven build does. A demo published from a
+      # client whose tests fail would be a demo that misrenders money.
+      - name: Test
+        working-directory: frontend
+        run: npm test
+
+      # `build:demo` typechecks, then builds with `--mode demo`: the base path
+      # becomes /finance-tracker/, the in-browser API is switched on, and the
+      # service worker is copied in. The plain `build` does none of that.
+      - name: Build
+        working-directory: frontend
+        run: npm run build:demo
+
+      # Pages has no rewrite rules, so a deep link like /finance-tracker/reports
+      # is a 404 — and 404.html is what it serves for one. Making that a copy of
+      # index.html boots the client, which then reads the URL and shows the
+      # right page. This is the Pages equivalent of SpaRoutes.
+      - name: Serve client routes on reload
+        run: cp frontend/dist/index.html frontend/dist/404.html
+
+      # Fails the build rather than publishing a demo with no demo in it: the
+      # worker and the banner are exactly what distinguishes this bundle from
+      # the one in the jar, and a mode flag that silently did not apply would
+      # otherwise publish a client whose every request 404s.
+      - name: Check the bundle really is the demo one
+        run: |
+          test -f frontend/dist/mockServiceWorker.js \
+            || { echo "no service worker: the demo API would not be mocked"; exit 1; }
+          grep -q '/finance-tracker/assets/' frontend/dist/index.html \
+            || { echo "the base path was not applied"; exit 1; }
+          grep -rq 'setupWorker' frontend/dist/assets/ \
+            || { echo "MSW is not in the bundle"; exit 1; }
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: frontend/dist
+
+  deploy:
+    name: publish to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

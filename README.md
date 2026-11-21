@@ -85,6 +85,12 @@ A React 19 + TypeScript client covering **all 23 endpoints**, so nothing in this
 reachable only by `curl`. It is served by the application itself, at `/`, on the same port as the
 API.
 
+**[Try it →](https://igorpujovic.github.io/finance-tracker/)** — the real client with the API
+faked in your browser, seeded from the sample statement below. Import a CSV, edit a transaction,
+re-categorize it; nothing is stored and a reload starts over. The application proper needs a JVM
+and a PostgreSQL, so what is published there is the client and not a running instance — and it
+says so on every page, because a demo that is quietly not the real thing is worse than none.
+
 ![The dashboard: one month's income, expenses and balance, with the category breakdown](docs/images/dashboard.jpg)
 
 | Page | What it does |
@@ -126,6 +132,11 @@ npm test                          # vitest
 The dev server proxies `/api` so the client fetches the same relative paths in development as in
 production. `./mvnw test -P backend-only` skips the client entirely when you are working on the
 Java side.
+
+`npm run build:demo` produces the GitHub Pages bundle instead of the jar's: the base path becomes
+`/finance-tracker/`, the in-browser API in `src/demo/` is switched on, and a banner is shown.
+None of that is in the build Maven ships — the branch that loads it is behind a flag the real
+build leaves unset, so the bundler drops the fixtures and MSW entirely.
 
 ## Two things that read as bugs
 
