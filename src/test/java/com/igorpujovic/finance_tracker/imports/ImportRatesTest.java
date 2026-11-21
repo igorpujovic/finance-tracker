@@ -49,6 +49,12 @@ class ImportRatesTest extends PostgresTest {
             04.11.2026,"NETFLIX.COM, AMSTERDAM",-9.99,EUR
             """;
 
+    /** The same euro line dated on a Sunday, which the bank publishes no rate for. */
+    private static final String WEEKEND_LINE = """
+            date,description,amount,currency
+            08.11.2026,"NETFLIX.COM, AMSTERDAM",-9.99,EUR
+            """;
+
     @Autowired
     MockMvc mvc;
 
@@ -184,10 +190,7 @@ class ImportRatesTest extends PostgresTest {
         // the last published rate, saying so in `date_from`.
         KURS.publishes(SUNDAY, Rate.of("EUR", FRIDAY, "117.2061"));
 
-        JsonNode batch = importing(upload("weekend.csv", """
-                date,description,amount,currency
-                08.11.2026,"NETFLIX.COM, AMSTERDAM",-9.99,EUR
-                """));
+        JsonNode batch = importing(upload("weekend.csv", WEEKEND_LINE));
 
         assertThat(batch.get("importedRows").asInt()).isEqualTo(1);
         mvc.perform(get("/api/transactions"))
@@ -198,6 +201,32 @@ class ImportRatesTest extends PostgresTest {
                 .isEqualTo(1);
         assertThat(ratesStoredOn(SUNDAY))
                 .as("the table must never claim an official rate existed on a Sunday")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("a rate on file from an earlier date is the rate in force, and nothing is downloaded")
+    void convertsAtTheLatestStoredRateOnOrBeforeTheDate() throws Exception {
+        // Friday's rate is already on file and Saturday's and Sunday's never will be,
+        // because the bank does not publish on either. Rule 11 is satisfied here without
+        // the network: the most recent rate on or before the Sunday is Friday's, which
+        // the pre-pass finds stored and never asks Kurs about. A converter that looked
+        // for a rate dated exactly 2026-11-08 would instead download the Sunday — and so
+        // would reject this line on the day the bank is unreachable.
+        jdbc.update("insert into exchange_rates (currency, rate_date, rate_to_rsd) values (?, ?, ?)",
+                "EUR", FRIDAY, new BigDecimal("117.2061"));
+
+        JsonNode batch = importing(upload("weekend.csv", WEEKEND_LINE));
+
+        assertThat(batch.get("importedRows").asInt()).isEqualTo(1);
+        mvc.perform(get("/api/transactions"))
+                .andExpect(jsonPath("$.content[0].amountRsd").value(-1170.89));
+
+        assertThat(KURS.datesAsked())
+                .as("a rate already in force needs no download at all")
+                .isEmpty();
+        assertThat(ratesStoredOn(SUNDAY))
+                .as("and nothing is invented under the Sunday to record what was used")
                 .isZero();
     }
 

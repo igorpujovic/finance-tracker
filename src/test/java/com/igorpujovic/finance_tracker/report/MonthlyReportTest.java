@@ -69,6 +69,29 @@ class MonthlyReportTest extends ReportTest {
         assertThat(food.get("categoryType").asString()).isEqualTo("EXPENSE");
     }
 
+    /**
+     * Rule 13. The euro line is worth 117 times its own number, so the two columns
+     * cannot be confused for one another: a report reading {@code amount} would put Food
+     * at -3660.79 and the balance 1160.90 dinars out, which is the kind of error that
+     * looks like a rounding problem and is not one.
+     */
+    @Test
+    @DisplayName("a foreign transaction is summed at its dinar amount, so currencies add up together")
+    void sumsForeignMoneyAtItsDinarAmount() throws Exception {
+        saveForeign("2026-09-14", "NETFLIX.COM, AMSTERDAM", "-9.99", "EUR", "-1170.89", "Food");
+
+        JsonNode report = getJson("/api/reports/monthly?year=2026&month=9");
+
+        assertThat(rowFor(report.get("categories"), "Food").get("totalRsd").decimalValue())
+                .as("-2450.80 and -1200.00 in dinars, plus -1170.89 the euro line was worth")
+                .isEqualByComparingTo("-4821.69");
+        assertThat(report.get("expenses").decimalValue()).isEqualByComparingTo("-10691.68");
+        assertThat(report.get("balance").decimalValue()).isEqualByComparingTo("109808.32");
+        assertThat(sumOf(report.get("categories"), "totalRsd"))
+                .as("the partition of rule 14 still holds with a foreign line in the month")
+                .isEqualByComparingTo(report.get("balance").decimalValue());
+    }
+
     @Test
     @DisplayName("a month with nothing in it reports zeros rather than nulls")
     void anEmptyMonthIsStillAReport() throws Exception {

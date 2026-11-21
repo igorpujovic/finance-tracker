@@ -29,6 +29,21 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-finance}
     ports:
       - "8080:8080"
+    # Without this, `docker compose up --wait` reports the app ready the moment the
+    # container is running — measured here as about six seconds before Tomcat accepted a
+    # connection, which is long enough for the first request of a script, or of CI, to
+    # fail against a stack that was about to be fine.
+    #
+    # The probe is a real endpoint rather than an actuator health group: `/api/categories`
+    # reads the seeded data through Flyway, JPA and the connection pool, so it answers
+    # only once everything the first real request needs is up. `wget` is busybox's, which
+    # the Alpine JRE image already carries; there is nothing to install for it.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/api/categories"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
 volumes:
   postgres-data:

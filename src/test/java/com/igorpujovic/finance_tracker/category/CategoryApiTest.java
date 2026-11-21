@@ -2,6 +2,7 @@ package com.igorpujovic.finance_tracker.category;
 
 import tools.jackson.databind.ObjectMapper;
 import com.igorpujovic.finance_tracker.support.PostgresTest;
+import com.igorpujovic.finance_tracker.transaction.TransactionRequest;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -27,6 +31,16 @@ class CategoryApiTest extends PostgresTest {
 
     @Autowired
     CategoryRepository categories;
+
+    /** A category that is not seeded reference data, so no rule and no money point at it. */
+    private long createCategory(String name, CategoryType type) throws Exception {
+        String created = mvc.perform(post("/api/categories")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(new CategoryRequest(name, type))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(created).get("id").asLong();
+    }
 
     private Long idOf(String name) {
         return categories.findAll().stream()
@@ -98,14 +112,30 @@ class CategoryApiTest extends PostgresTest {
     }
 
     @Test
+    @DisplayName("a category with money filed under it cannot be deleted, with no rule involved")
+    void refusesToDeleteCategoryHoldingTransactions() throws Exception {
+        long id = createCategory("Hobbies", CategoryType.EXPENSE);
+
+        String transaction = json.writeValueAsString(new TransactionRequest(
+                LocalDate.of(2026, 11, 3), "IGRAONICA NOVI SAD",
+                new BigDecimal("-1800.00"), "RSD", id));
+        mvc.perform(post("/api/transactions")
+                        .contentType(MediaType.APPLICATION_JSON).content(transaction))
+                .andExpect(status().isCreated());
+
+        // A category this test created, so no seeded rule points at it and the money is
+        // the only thing in the way. The reason is asserted and not just the status:
+        // both halves of rule 9 answer 409, and a test that read either as the other
+        // would stay green while one of them was gone.
+        mvc.perform(delete("/api/categories/" + id))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(Matchers.containsString("transactions")));
+    }
+
+    @Test
     @DisplayName("an unused category is deleted, and deleting it again is a 404")
     void deletesUnusedCategory() throws Exception {
-        String body = json.writeValueAsString(new CategoryRequest("Temporary", CategoryType.EXPENSE));
-        String created = mvc.perform(post("/api/categories")
-                        .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-        long id = json.readTree(created).get("id").asLong();
+        long id = createCategory("Temporary", CategoryType.EXPENSE);
 
         mvc.perform(delete("/api/categories/" + id)).andExpect(status().isNoContent());
         mvc.perform(delete("/api/categories/" + id)).andExpect(status().isNotFound());

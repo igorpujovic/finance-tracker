@@ -62,6 +62,19 @@ abstract class ReportTest extends PostgresTest {
     }
 
     /**
+     * One foreign transaction: what the bank charged, in the currency it charged it in,
+     * and separately what that was worth in dinars on the day (GLOSSARY: dinar amount).
+     * The two differ here on purpose, and by a wide margin — a report that summed the
+     * wrong column would be right about every dinar row and silently wrong about this
+     * one, which is the shape of mistake rule 13 exists to catch.
+     */
+    void saveForeign(String date, String description, String amount, String currency,
+                     String amountRsd, String categoryName) {
+        transactions.save(Transaction.manual(LocalDate.parse(date), description,
+                new BigDecimal(amount), currency, new BigDecimal(amountRsd), category(categoryName)));
+    }
+
+    /**
      * One September, with money in every shape a report has to account for: income, two
      * transactions in one expense category, an uncategorized expense and an uncategorized
      * refund. Income is 120500.00, expenses are -9520.79, and the balance is 110979.21.
