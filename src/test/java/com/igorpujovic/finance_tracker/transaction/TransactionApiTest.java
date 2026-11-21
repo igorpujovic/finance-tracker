@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -85,12 +86,17 @@ class TransactionApiTest extends PostgresTest {
     }
 
     @Test
-    @DisplayName("a foreign currency is refused with a reason until rates arrive in step 4")
-    void rejectsForeignCurrencyForNow() throws Exception {
-        mvc.perform(post("/api/transactions").contentType(MediaType.APPLICATION_JSON)
-                        .content(body(LocalDate.of(2026, 11, 4), "NETFLIX.COM", "-9.99", "EUR", null)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("RSD")));
+    @DisplayName("amending a dinar transaction carries the dinar amount with the new amount")
+    void amendsADinarTransaction() throws Exception {
+        long id = create(body(LocalDate.of(2026, 11, 3), "MAXI", "-500.00", "RSD", idOf("Food")));
+
+        mvc.perform(put("/api/transactions/" + id).contentType(MediaType.APPLICATION_JSON)
+                        .content(body(LocalDate.of(2026, 11, 3), "MAXI 245 BEOGRAD", "-650.00", "RSD",
+                                idOf("Food"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.description").value("MAXI 245 BEOGRAD"))
+                .andExpect(jsonPath("$.amount").value(-650.00))
+                .andExpect(jsonPath("$.amountRsd").value(-650.00));
     }
 
     @Test

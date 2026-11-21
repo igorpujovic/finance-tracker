@@ -49,6 +49,19 @@ class DinarAmountTest {
     }
 
     @Test
+    @DisplayName("the widest amount the dinar column holds fits, and one digit more does not")
+    void knowsWhatTheDinarColumnHolds() {
+        // `numeric(12, 2)` is ten whole digits and two decimals, so the boundary is
+        // asserted on both sides of itself: a converter that read the precision as twelve
+        // whole digits would pass everything here and fail at the insert, where on the
+        // import path it would roll back every other line of the file.
+        assertThat(DinarAmount.fitsTheColumn(new BigDecimal("9999999999.99"))).isTrue();
+        assertThat(DinarAmount.fitsTheColumn(new BigDecimal("-9999999999.99"))).isTrue();
+        assertThat(DinarAmount.fitsTheColumn(new BigDecimal("10000000000.00"))).isFalse();
+        assertThat(DinarAmount.fitsTheColumn(new BigDecimal("-10000000000.00"))).isFalse();
+    }
+
+    @Test
     @DisplayName("the dinar amount is carried to exactly two decimal places")
     void carriesTwoDecimalPlaces() {
         // The scale of `transactions.amount_rsd`. Asserted as scale rather than by value,

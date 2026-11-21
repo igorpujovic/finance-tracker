@@ -198,7 +198,7 @@ still holds money, and 503 when the National Bank cannot be reached.
 
 ```json
 {"timestamp":"2026-11-21T13:23:28.407955947Z","status":400,"error":"Bad Request",
- "message":"Manual transactions are limited to RSD until exchange rates arrive; got EUR"}
+ "message":"no exchange rate for ZWL on 2026-11-04"}
 ```
 
 **The CSV export** is RFC 4180 with a UTF-8 byte-order mark, so Serbian category names survive a
@@ -238,9 +238,16 @@ transaction's own date, read from the [Kurs API](https://kurs.resenje.org) (no k
 - A statement from last year does not depend on that job having run: an import resolves the dates
   it is missing before it opens a database transaction, downloading once per missing date
   ([ADR-0005](docs/adr/0005-rates-are-resolved-before-the-import-transaction-opens.md)).
-- A currency the bank does not publish rejects **that line**, with the reason. A network failure
-  is not the line's fault and aborts the **whole upload** with 503, writing nothing — upload the
-  same file again when the bank is back.
+- A transaction entered or corrected by hand converts the same way and under the same ordering:
+  `POST` and `PUT /api/transactions` resolve the one currency-and-date pair the request names
+  before the write opens, so an imported foreign row can be amended in the currency it came with
+  rather than only by a claim that it was in dinars.
+- A currency the bank does not publish rejects **that source line**, with the reason. A request
+  carrying a single transaction has nothing else in it, so the same reason comes back as a 400 —
+  and the same goes for a conversion too large or too small for the dinar column.
+- A network failure is not the line's fault and aborts the **whole upload** with 503, writing
+  nothing — upload the same file again when the bank is back. A manual request answers 503 the
+  same way and stores nothing, because the rate is resolved before the row is written.
 
 ## Known limitations
 
@@ -268,11 +275,6 @@ whose description says so in words.
 the transaction row, so deleting the row deletes the memory that the source line was ever
 imported, and the next upload of that file imports it again as new. Deletion is a correction of
 the database, not of the statement.
-
-**Manual transactions are RSD only.** `POST /api/transactions` refuses a foreign currency with a
-400; importing is the path that converts. The refusal message still says "until exchange rates
-arrive", which is now out of date — the rates did arrive, in step 4, and only the import path was
-wired to them.
 
 **One user, no accounts, no authentication.** The API is a single person's ledger and is not
 exposed to the internet by this compose file. Users were dropped from the roadmap deliberately:

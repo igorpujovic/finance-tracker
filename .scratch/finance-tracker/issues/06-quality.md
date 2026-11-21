@@ -86,6 +86,8 @@ canonical snippet was looking everywhere except the likeliest place.
   refuses a foreign currency with a message promising rates "until exchange rates arrive" —
   which arrived in step 4. Only the import path was wired to them. Worth its own ticket; it is a
   stale message and a missing conversion on the manual path, not a quality problem with step 6.
+  **Filed as 08 and since fixed there:** the manual endpoint resolves its own rate, so that
+  limitation is gone from the README and four remain.
 
 ### Verified, not assumed
 

@@ -1,6 +1,7 @@
 package com.igorpujovic.finance_tracker.imports;
 
 import com.igorpujovic.finance_tracker.common.NotFoundException;
+import com.igorpujovic.finance_tracker.rates.Conversion;
 import com.igorpujovic.finance_tracker.transaction.TransactionRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

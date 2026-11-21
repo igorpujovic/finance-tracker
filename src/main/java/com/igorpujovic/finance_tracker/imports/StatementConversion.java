@@ -1,11 +1,11 @@
 package com.igorpujovic.finance_tracker.imports;
 
+import com.igorpujovic.finance_tracker.rates.Conversion;
 import com.igorpujovic.finance_tracker.rates.CurrencyOnDate;
 import com.igorpujovic.finance_tracker.rates.ExchangeRateService;
 import com.igorpujovic.finance_tracker.rates.ResolvedRates;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,9 +16,11 @@ import java.util.Map;
  * HTTP call is ever made while one is held.
  * <p>
  * It hands the whole set of currency-and-date pairs over at once rather than asking line
- * by line. That is the entire reason the pre-pass exists: resolving them together costs
- * one download per genuinely missing date, where asking per line would cost one per row
- * of a bank statement.
+ * by line, and that is the entire reason it exists as a class of its own: resolving them
+ * together costs one download per genuinely missing date, where asking per line would
+ * cost one per row of a bank statement. What each line is then worth is
+ * {@link ResolvedRates#conversionOf}, which the manual endpoint asks the same question
+ * of, one line at a time.
  * <p>
  * What comes back is one {@link Conversion} per line, no partial state and nothing to
  * undo — and a line nothing can convert is the line's own problem. A failure to reach the
@@ -27,9 +29,6 @@ import java.util.Map;
  */
 @Component
 class StatementConversion {
-
-    /** The widths of {@code transactions.amount_rsd}, which is {@code numeric(12, 2)}. */
-    private static final int DINAR_WHOLE_DIGITS = 10;
 
     private final ExchangeRateService rates;
 
@@ -47,35 +46,8 @@ class StatementConversion {
         Map<Integer, Conversion> conversions = new HashMap<>();
         for (SourceLine line : lines) {
             conversions.put(line.rowNumber(),
-                    conversionOf(line, spent.get(line.rowNumber()), resolved));
+                    resolved.conversionOf(line.amount(), spent.get(line.rowNumber())));
         }
         return conversions;
-    }
-
-    private Conversion conversionOf(SourceLine line, CurrencyOnDate spent, ResolvedRates resolved) {
-        return resolved.dinarAmountOf(line.amount(), spent)
-                .map(dinars -> storable(line, dinars))
-                .orElseGet(() -> new Conversion.Unavailable(
-                        "no exchange rate for " + spent.currency() + " on " + spent.date()));
-    }
-
-    /**
-     * A conversion the column could not hold is refused here rather than at the insert,
-     * where it would roll back every other line in the file — the same reason the parser
-     * checks the size of the amount the file gave. Both readings of "could not hold" are
-     * the line's own problem and neither is reachable from a sane rate, which is why they
-     * each name the line's own amount, currency and date.
-     */
-    private Conversion storable(SourceLine line, BigDecimal dinars) {
-        String which = line.amount() + " " + line.currency() + " on " + line.date();
-        if (dinars.signum() == 0) {
-            // ADR-0002: zero has no sign and therefore no nature, so it cannot be stored
-            // even though the amount the file gave was a real expense or a real income.
-            return new Conversion.Unavailable(which + " is worth less than 0.01 RSD");
-        }
-        if (dinars.precision() - dinars.scale() > DINAR_WHOLE_DIGITS) {
-            return new Conversion.Unavailable(which + " is worth more dinars than can be stored");
-        }
-        return new Conversion.DinarAmount(dinars);
     }
 }

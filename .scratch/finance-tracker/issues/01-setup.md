@@ -67,6 +67,8 @@ by reading:
   `/var/lib/postgresql/data`; with the old path the container exits 1 on first start.
 
 Carried into step 2 as planned: manual transactions are RSD-only and return 400 for any other
-currency, since converting one needs the rate machinery from step 4.
+currency, since converting one needs the rate machinery from step 4. (That limit outlived its
+reason and was lifted in 08 — the rate machinery arrived in 04 and only the import path was
+wired to it.)
 
 No README yet — that is step 6's scope.
