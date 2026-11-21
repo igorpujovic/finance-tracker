@@ -70,10 +70,17 @@ would be an open ledger anyone could write to, and the free database tiers that 
 expire or sleep.
 
 What is published instead is the real client with the network replaced: the same components and
-the same hooks, with MSW answering `/api` from an in-memory store in `frontend/src/demo`, seeded
-so the opening figures are the ones this README pins and the test suite asserts. A visitor can
-import a statement, correct a transaction and re-categorize it, and see the real refusals — a 409
-for deleting a category that still holds money, a 400 naming an unpriced currency.
+the same hooks, with MSW answering `/api` from an in-memory store in `frontend/src/demo`. A
+visitor can import a statement, correct a transaction and re-categorize it, and see the real
+refusals — a 409 for deleting a category that still holds money, a 400 naming an unpriced
+currency.
+
+Its November is `sample.csv`, so every category total is the one the README prints — Utilities
+−4.870,00, Food −2.450,80, Entertainment −1.174,84, Salary 95.000,00 — and the expense total is
+the README's −8.495,64 exactly. Income and balance are deliberately not: the demo adds an
+October month so the comparison report has something to compare against, and a refund that no
+rule can claim so the uncategorized row has money in it. Both are things the README's two-curl
+walkthrough does not produce and a reader of a dashboard should see.
 
 Two things make this honest rather than a trap. A permanent, undismissable banner says what it is
 and that nothing is saved, because somebody will otherwise import a real statement and wonder

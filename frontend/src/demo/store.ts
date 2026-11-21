@@ -36,12 +36,19 @@ export interface Db {
 }
 
 /**
- * Rates for the two dates the seeded data needs, plus a fallback. The real
- * client reads these from the National Bank at import time; a static demo has
- * no server to ask, so a foreign line converts at the rate recorded here —
- * 117.2061 being the rate the README's Netflix line actually converted at.
+ * The real client reads these from the National Bank at import time; a static
+ * demo has no server to ask, so a foreign line converts at the rate recorded
+ * here.
+ *
+ * The euro rate is the National Bank's for 2026-11-04, the date of the sample
+ * statement's Netflix line, and it is the rate that produces the −1.174,84 the
+ * README shows and a live import actually returns. It is deliberately *not*
+ * the 117.2061 that `ImportRatesTest` uses: that is a fixture invented for a
+ * fake HTTP server, and seeding the demo from it put −1.170,89 on the
+ * dashboard — four dinars adrift of the documentation, which is exactly the
+ * kind of quiet disagreement this file is supposed to make visible.
  */
-const RATES: Record<string, number> = { EUR: 117.2061, USD: 108.4, CHF: 124.9 };
+const RATES: Record<string, number> = { EUR: 117.6016, USD: 108.4, CHF: 124.9 };
 
 export const UNKNOWN_CURRENCY = 'ZWL';
 
